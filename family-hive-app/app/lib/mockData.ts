@@ -3,20 +3,21 @@ export type FamilyMember = {
   name: string;
   role: string;
   status: string;
+  profileImage?: string;
 };
 
 export const familyMembers: FamilyMember[] = [
-  { id: "alex", name: "Alex", role: "Parent", status: "Planning spring break." },
-  { id: "morgan", name: "Morgan", role: "Parent", status: "Adding grocery ideas." },
-  { id: "jules", name: "Jules", role: "Teen", status: "Working on school projects." },
-  { id: "remy", name: "Remy", role: "Kid", status: "Excited for movie night." },
+  { id: "joey", name: "joey", role: "Parent", status: "keeping it trill." },
+  { id: "alejandra", name: "alejandra", role: "Parent", status: "what dat is" },
+  { id: "camila", name: "camila", role: "Teen", status: "Working on school projects." },
+  { id: "joseph", name: "joseph", role: "Kid", status: "I want to build apps." },
 ];
 
 export const memberPins: Record<string, string> = {
-  alex: "1234",
-  morgan: "2345",
-  jules: "3456",
-  remy: "4567",
+  joey: "1102",
+  alejandra: "1102",
+  camila: "1102",
+  joseph: "1102",
 };
 
 export const familyName = "The Hive";
@@ -31,19 +32,19 @@ export type FamilyMessage = {
 export const familyMessages: FamilyMessage[] = [
   {
     id: "msg-1",
-    authorId: "alex",
+    authorId: "joey",
     text: "Movie night is Friday. Add picks to the list!",
     timestamp: "2026-02-21T19:30:00.000Z",
   },
   {
     id: "msg-2",
-    authorId: "morgan",
+    authorId: "alejandra",
     text: "Can someone grab extra milk?",
     timestamp: "2026-02-21T16:10:00.000Z",
   },
   {
     id: "msg-3",
-    authorId: "jules",
+    authorId: "camila",
     text: "I will be late to dinner tonight.",
     timestamp: "2026-02-20T22:05:00.000Z",
   },
