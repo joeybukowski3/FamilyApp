@@ -6,6 +6,7 @@ import Card from "@/app/components/Card";
 import PageHeader from "@/app/components/PageHeader";
 import ShellFrame from "@/app/components/ShellFrame";
 import Avatar from "@/app/components/Avatar";
+import useSupabaseUser from "@/app/lib/useSupabaseUser";
 import { familyMembers } from "@/app/lib/mockData";
 import {
   FamilyEvent,
@@ -15,38 +16,38 @@ import {
 } from "@/app/lib/scheduleStore";
 
 export default function SchedulePage() {
+  const user = useSupabaseUser();
   const [events, setEvents] = useState<FamilyEvent[]>(getSeedSchedule);
   const [title, setTitle] = useState("");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [notes, setNotes] = useState("");
-  const [activeMemberId, setActiveMemberId] = useState<string | null>(null);
 
   useEffect(() => {
     setEvents(hydrateSchedule());
-
-    if (typeof window === "undefined") return;
-    const storedSession = window.localStorage.getItem("family-hive-session");
-    if (!storedSession) return;
-
-    try {
-      const parsed = JSON.parse(storedSession) as {
-        memberId?: string;
-        unlocked?: boolean;
-      };
-      if (parsed.unlocked && parsed.memberId) {
-        setActiveMemberId(parsed.memberId);
-      }
-    } catch {
-      window.localStorage.removeItem("family-hive-session");
-    }
   }, []);
 
   const memberLookup = useMemo(() => {
     return new Map(familyMembers.map((member) => [member.id, member]));
   }, []);
 
-  const canEdit = Boolean(activeMemberId);
+  const activeMemberId = useMemo(() => {
+    if (!user?.email) {
+      return familyMembers[0]?.id ?? "family";
+    }
+    const local = user.email.split("@")[0]?.toLowerCase() ?? "";
+    return (
+      familyMembers.find(
+        (member) =>
+          member.id.toLowerCase() === local ||
+          member.name.toLowerCase() === local
+      )?.id ??
+      familyMembers[0]?.id ??
+      "family"
+    );
+  }, [user?.email]);
+
+  const canEdit = Boolean(user);
 
   const sortedEvents = useMemo(() => {
     return [...events].sort((a, b) => a.startISO.localeCompare(b.startISO));

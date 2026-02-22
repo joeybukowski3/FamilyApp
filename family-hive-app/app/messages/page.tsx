@@ -1,10 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import Card from "@/app/components/Card";
 import PageHeader from "@/app/components/PageHeader";
 import ShellFrame from "@/app/components/ShellFrame";
 import Avatar from "@/app/components/Avatar";
+import useSupabaseUser from "@/app/lib/useSupabaseUser";
 import {
   familyMembers,
   familyMessages,
@@ -12,34 +14,30 @@ import {
 } from "@/app/lib/mockData";
 
 const STORAGE_KEY = "family_messages";
-const SESSION_KEY = "family-hive-session";
-
-type SessionState = {
-  memberId: string;
-  unlocked: boolean;
-};
 
 export default function MessagesPage() {
+  const user = useSupabaseUser();
   const [messages, setMessages] = useState<FamilyMessage[]>(familyMessages);
   const [draft, setDraft] = useState("");
-  const [activeMemberId, setActiveMemberId] = useState(
-    familyMembers[0]?.id ?? ""
-  );
+  const activeMemberId = useMemo(() => {
+    if (!user?.email) {
+      return familyMembers[0]?.id ?? "family";
+    }
+    const local = user.email.split("@")[0]?.toLowerCase() ?? "";
+    return (
+      familyMembers.find(
+        (member) =>
+          member.id.toLowerCase() === local ||
+          member.name.toLowerCase() === local
+      )?.id ??
+      familyMembers[0]?.id ??
+      "family"
+    );
+  }, [user?.email]);
+  const canEdit = Boolean(user);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-
-    const storedSession = window.localStorage.getItem(SESSION_KEY);
-    if (storedSession) {
-      try {
-        const parsed = JSON.parse(storedSession) as SessionState;
-        if (parsed.memberId) {
-          setActiveMemberId(parsed.memberId);
-        }
-      } catch {
-        window.localStorage.removeItem(SESSION_KEY);
-      }
-    }
 
     const storedMessages = window.localStorage.getItem(STORAGE_KEY);
     if (!storedMessages) return;
@@ -59,6 +57,7 @@ export default function MessagesPage() {
   }, []);
 
   const handlePost = () => {
+    if (!canEdit) return;
     const trimmed = draft.trim();
     if (!trimmed) return;
 
@@ -123,11 +122,21 @@ export default function MessagesPage() {
                   type="button"
                   onClick={handlePost}
                   className="btnAccent rounded-full px-5 py-2 text-xs font-semibold uppercase tracking-[0.2em]"
+                  disabled={!canEdit}
                 >
                   Post
                 </button>
               </div>
             </div>
+
+            {!canEdit ? (
+              <div className="rounded-2xl bg-zinc-50 px-4 py-3 text-xs text-zinc-500">
+                Unlock to post messages.{" "}
+                <Link href="/unlock" className="font-semibold text-zinc-700">
+                  Go to unlock
+                </Link>
+              </div>
+            ) : null}
 
             <div className="space-y-3">
               {messages.map((message) => {

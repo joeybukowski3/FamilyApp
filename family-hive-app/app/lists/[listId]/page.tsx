@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import Card from "@/app/components/Card";
 import ShellFrame from "@/app/components/ShellFrame";
 import Avatar from "@/app/components/Avatar";
+import useSupabaseUser from "@/app/lib/useSupabaseUser";
 import { familyMembers } from "@/app/lib/mockData";
 import {
   getSeedLists,
@@ -15,10 +16,10 @@ import {
 } from "@/app/lib/listsStore";
 
 export default function ListDetailPage() {
+  const user = useSupabaseUser();
   const [lists, setLists] = useState<ListsState>(getSeedLists);
   const [draft, setDraft] = useState("");
   const [hideCompleted, setHideCompleted] = useState(false);
-  const [activeMemberId, setActiveMemberId] = useState<string | null>(null);
 
   const routeParams = useParams();
   const listIdRaw = routeParams?.listId;
@@ -28,29 +29,29 @@ export default function ListDetailPage() {
 
   useEffect(() => {
     setLists(hydrateLists());
-
-    if (typeof window === "undefined") return;
-    const storedSession = window.localStorage.getItem("family-hive-session");
-    if (!storedSession) return;
-
-    try {
-      const parsed = JSON.parse(storedSession) as {
-        memberId?: string;
-        unlocked?: boolean;
-      };
-      if (parsed.unlocked && parsed.memberId) {
-        setActiveMemberId(parsed.memberId);
-      }
-    } catch {
-      window.localStorage.removeItem("family-hive-session");
-    }
   }, []);
 
   const memberLookup = useMemo(() => {
     return new Map(familyMembers.map((member) => [member.id, member]));
   }, []);
 
-  const canEdit = Boolean(activeMemberId);
+  const activeMemberId = useMemo(() => {
+    if (!user?.email) {
+      return familyMembers[0]?.id ?? "family";
+    }
+    const local = user.email.split("@")[0]?.toLowerCase() ?? "";
+    return (
+      familyMembers.find(
+        (member) =>
+          member.id.toLowerCase() === local ||
+          member.name.toLowerCase() === local
+      )?.id ??
+      familyMembers[0]?.id ??
+      "family"
+    );
+  }, [user?.email]);
+
+  const canEdit = Boolean(user);
 
   // Guard: route param missing
   if (!listId || typeof listId !== "string") {
