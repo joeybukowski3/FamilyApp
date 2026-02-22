@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { familyMembers, memberPins } from "@/app/lib/mockData";
+import Card from "@/app/components/Card";
+import ProfileSetupModal from "@/app/components/ProfileSetupModal";
 
 const SESSION_KEY = "family-hive-session";
 
@@ -52,8 +54,8 @@ export default function UnlockPage() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-50 px-6 py-12 text-zinc-900">
-      <div className="mx-auto w-full max-w-lg space-y-6">
+    <div className="min-h-screen bg-[#f5f6f8] px-6 py-12 text-zinc-800">
+      <div className="mx-auto w-full max-w-2xl space-y-6">
         <header className="space-y-2">
           <p className="text-xs uppercase tracking-[0.2em] text-zinc-400">
             Family Hive
@@ -64,69 +66,72 @@ export default function UnlockPage() {
           </p>
         </header>
 
-        <form
-          onSubmit={handleUnlock}
-          className="space-y-4 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm"
-        >
-          <label className="flex flex-col gap-2 text-sm font-medium">
-            Member
-            <select
-              className="rounded-lg border border-zinc-200 px-3 py-2 text-sm"
-              value={memberId}
-              onChange={(event) => setMemberId(event.target.value)}
-            >
-              {familyMembers.map((member) => (
-                <option key={member.id} value={member.id}>
-                  {member.name} · {member.role}
-                </option>
-              ))}
-            </select>
-          </label>
+        <Card>
+          <form onSubmit={handleUnlock} className="space-y-4">
+            <label className="flex flex-col gap-2 text-sm font-medium">
+              Member
+              <select
+                className="rounded-xl border border-zinc-200 px-3 py-2 text-sm"
+                value={memberId}
+                onChange={(event) => setMemberId(event.target.value)}
+              >
+                {familyMembers.map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {member.name} · {member.role}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-          <label className="flex flex-col gap-2 text-sm font-medium">
-            PIN
-            <input
-              type="password"
-              inputMode="numeric"
-              className="rounded-lg border border-zinc-200 px-3 py-2 text-sm"
-              value={pin}
-              onChange={(event) => setPin(event.target.value)}
-              placeholder="Enter 4-digit PIN"
-            />
-          </label>
+            <label className="flex flex-col gap-2 text-sm font-medium">
+              PIN
+              <input
+                type="password"
+                inputMode="numeric"
+                className="rounded-xl border border-zinc-200 px-3 py-2 text-sm"
+                value={pin}
+                onChange={(event) => setPin(event.target.value)}
+                placeholder="Enter 4-digit PIN"
+              />
+            </label>
 
-          {status === "error" ? (
-            <p className="text-sm text-red-500">
-              That PIN does not match. Try again.
-            </p>
-          ) : null}
-          {status === "success" ? (
-            <p className="text-sm text-green-600">
-              Unlocked! You can head back to the dashboard.
-            </p>
-          ) : null}
+            {status === "error" ? (
+              <p className="text-sm text-red-500">
+                That PIN does not match. Try again.
+              </p>
+            ) : null}
+            {status === "success" ? (
+              <p className="text-sm text-green-600">
+                Unlocked! You can head back to the dashboard.
+              </p>
+            ) : null}
 
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="submit"
-              className="rounded-full bg-zinc-900 px-5 py-2 text-sm font-semibold text-white"
-            >
-              Unlock
-            </button>
-            <button
-              type="button"
-              onClick={handleClear}
-              className="rounded-full border border-zinc-200 px-5 py-2 text-sm font-semibold text-zinc-600"
-            >
-              Clear session
-            </button>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="submit"
+                className="rounded-full bg-zinc-900 px-5 py-2 text-sm font-semibold text-white"
+              >
+                Unlock
+              </button>
+              <button
+                type="button"
+                onClick={handleClear}
+                className="rounded-full border border-zinc-200 px-5 py-2 text-sm font-semibold text-zinc-600"
+              >
+                Clear session
+              </button>
+            </div>
+          </form>
+        </Card>
+
+        <ProfileSetupModal defaultOpen />
+
+        <Card>
+          <div className="text-xs text-zinc-500">
+            Session stored locally: {session ? `${session.memberId} unlocked` : "none"}.
+            TODO: Replace with secure auth + server session.
           </div>
-        </form>
-
-        <div className="rounded-xl border border-dashed border-zinc-200 bg-white px-4 py-3 text-xs text-zinc-500">
-          Session stored locally: {session ? `${session.memberId} unlocked` : "none"}.
-          TODO: Replace with secure auth + server session.
-        </div>
+        </Card>
       </div>
     </div>
   );
