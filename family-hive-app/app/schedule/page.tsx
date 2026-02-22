@@ -131,7 +131,7 @@ export default function SchedulePage() {
                 <button
                   type="button"
                   onClick={handleAddEvent}
-                  className="rounded-full bg-zinc-900 px-5 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-white"
+                  className="btnPrimary rounded-full px-5 py-2 text-xs font-semibold uppercase tracking-[0.2em]"
                 >
                   Add Event
                 </button>

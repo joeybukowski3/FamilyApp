@@ -1,21 +1,29 @@
 "use client";
 
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import Card from "@/app/components/Card";
 import ShellFrame from "@/app/components/ShellFrame";
 import { familyMembers } from "@/app/lib/mockData";
-import { getSeedLists, hydrateLists, ListsState, saveLists } from "@/app/lib/listsStore";
+import {
+  getSeedLists,
+  hydrateLists,
+  ListsState,
+  saveLists,
+} from "@/app/lib/listsStore";
 
-type Props = {
-  params: { listId: string };
-};
-
-export default function ListDetailPage({ params }: Props) {
+export default function ListDetailPage() {
   const [lists, setLists] = useState<ListsState>(getSeedLists);
   const [draft, setDraft] = useState("");
   const [hideCompleted, setHideCompleted] = useState(false);
   const [activeMemberId, setActiveMemberId] = useState<string | null>(null);
+
+  const routeParams = useParams();
+  const listIdRaw = routeParams?.listId;
+  const listId = Array.isArray(listIdRaw)
+    ? listIdRaw[0]
+    : (listIdRaw as string | undefined);
 
   useEffect(() => {
     setLists(hydrateLists());
@@ -37,13 +45,29 @@ export default function ListDetailPage({ params }: Props) {
     }
   }, []);
 
-  const group = lists.groups.find((entry) => entry.id === params.listId);
-
   const memberLookup = useMemo(() => {
     return new Map(familyMembers.map((member) => [member.id, member]));
   }, []);
 
   const canEdit = Boolean(activeMemberId);
+
+  // Guard: route param missing
+  if (!listId || typeof listId !== "string") {
+    return (
+      <ShellFrame>
+        <Card title="List">
+          <div className="text-sm text-zinc-500">
+            Missing list id.{" "}
+            <Link href="/lists" className="font-semibold text-zinc-700">
+              Back to lists
+            </Link>
+          </div>
+        </Card>
+      </ShellFrame>
+    );
+  }
+
+  const group = lists.groups.find((entry) => entry.id === listId);
 
   if (!group) {
     return (
@@ -78,6 +102,7 @@ export default function ListDetailPage({ params }: Props) {
       text: trimmed,
       createdAt: new Date().toISOString(),
       createdByMemberId: activeMemberId,
+      completedAt: undefined as string | undefined,
     };
 
     setLists((prev) => {
@@ -85,6 +110,7 @@ export default function ListDetailPage({ params }: Props) {
       saveLists(updated);
       return updated;
     });
+
     setDraft("");
   };
 
@@ -114,9 +140,10 @@ export default function ListDetailPage({ params }: Props) {
               {group.title}
             </div>
             <p className="text-xs text-zinc-400">
-              {items.length} item{items.length === 1 ? "" : "s"}
+              {listItems.length} item{listItems.length === 1 ? "" : "s"}
             </p>
           </div>
+
           <div className="flex flex-1 flex-wrap items-center gap-2 sm:justify-end">
             <input
               type="text"
@@ -125,13 +152,14 @@ export default function ListDetailPage({ params }: Props) {
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               disabled={!canEdit}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleAddItem();
+              }}
             />
             <button
               type="button"
               onClick={handleAddItem}
-              className={`rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-white ${
-                canEdit ? "bg-zinc-900" : "bg-zinc-300"
-              }`}
+              className="btnPrimary rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em]"
               disabled={!canEdit}
             >
               Add Item

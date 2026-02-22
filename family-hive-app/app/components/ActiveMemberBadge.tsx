@@ -53,10 +53,10 @@ export default function ActiveMemberBadge() {
   if (!activeMember) {
     return (
       <div className="flex items-center gap-3 text-xs text-zinc-500">
-        <span className="rounded-full bg-zinc-100 px-3 py-1">Locked</span>
+        <span className="pillActive rounded-full px-3 py-1">Locked</span>
         <Link
           href="/unlock"
-          className="rounded-full border border-zinc-200 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500"
+          className="btnSecondary rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em]"
         >
           Unlock
         </Link>
@@ -85,14 +85,14 @@ export default function ActiveMemberBadge() {
       <div className="flex items-center gap-2">
         <Link
           href="/unlock"
-          className="rounded-full border border-zinc-200 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500"
+          className="btnSecondary rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em]"
         >
           Switch
         </Link>
         <button
           type="button"
           onClick={() => setLockRequested(true)}
-          className="rounded-full bg-zinc-900 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-white"
+          className="btnPrimary rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em]"
         >
           Lock
         </button>

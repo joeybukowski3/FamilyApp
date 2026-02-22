@@ -1,138 +1,163 @@
-"use client";
+﻿"use client";
 
-import { useEffect, useState } from "react";
-import { familyMembers, memberPins } from "@/app/lib/mockData";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import Card from "@/app/components/Card";
+import ShellFrame from "@/app/components/ShellFrame";
 import ProfileSetupModal from "@/app/components/ProfileSetupModal";
+import { familyMembers, memberPins } from "@/app/lib/mockData";
 
-const SESSION_KEY = "family-hive-session";
-
-type SessionState = {
+type Session = {
   memberId: string;
   unlocked: boolean;
 };
 
+const SESSION_KEY = "family-hive-session";
+
 export default function UnlockPage() {
-  const [memberId, setMemberId] = useState(familyMembers[0]?.id ?? "");
+  const [selectedMemberId, setSelectedMemberId] = useState<string>(
+    familyMembers[0]?.id ?? ""
+  );
   const [pin, setPin] = useState("");
-  const [status, setStatus] = useState<"idle" | "error" | "success">("idle");
-  const [session, setSession] = useState<SessionState | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [unlockedMemberId, setUnlockedMemberId] = useState<string | null>(null);
+
+  const selectedMember = useMemo(
+    () => familyMembers.find((m) => m.id === selectedMemberId) ?? null,
+    [selectedMemberId]
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const stored = window.localStorage.getItem(SESSION_KEY);
-    if (!stored) return;
+    const raw = window.localStorage.getItem(SESSION_KEY);
+    if (!raw) return;
 
     try {
-      const parsed = JSON.parse(stored) as SessionState;
-      setSession(parsed);
+      const parsed = JSON.parse(raw) as Partial<Session>;
+      if (parsed.unlocked && parsed.memberId) {
+        setUnlockedMemberId(parsed.memberId);
+        setSelectedMemberId(parsed.memberId);
+      }
     } catch {
       window.localStorage.removeItem(SESSION_KEY);
     }
   }, []);
 
-  const handleUnlock = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!memberId) return;
+  const handleUnlock = () => {
+    setError(null);
 
-    if (memberPins[memberId] === pin) {
-      const nextSession: SessionState = { memberId, unlocked: true };
-      window.localStorage.setItem(SESSION_KEY, JSON.stringify(nextSession));
-      setSession(nextSession);
-      setStatus("success");
-      setPin("");
+    if (!selectedMemberId) {
+      setError("Select a family member first.");
       return;
     }
 
-    setStatus("error");
+    const expectedPin = memberPins[selectedMemberId];
+    if (!expectedPin) {
+      setError("No PIN configured for this member yet.");
+      return;
+    }
+
+    if (pin.trim() !== expectedPin) {
+      setError("Incorrect PIN.");
+      return;
+    }
+
+    const session: Session = { memberId: selectedMemberId, unlocked: true };
+    window.localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    setUnlockedMemberId(selectedMemberId);
+    setPin("");
   };
 
-  const handleClear = () => {
+  const handleLock = () => {
     window.localStorage.removeItem(SESSION_KEY);
-    setSession(null);
-    setStatus("idle");
+    setUnlockedMemberId(null);
+    setPin("");
+    setError(null);
   };
 
   return (
-    <div className="min-h-screen bg-[#f5f6f8] px-6 py-12 text-zinc-800">
-      <div className="mx-auto w-full max-w-2xl space-y-6">
-        <header className="space-y-2">
-          <p className="text-xs uppercase tracking-[0.2em] text-zinc-400">
-            Family Hive
-          </p>
-          <h1 className="text-3xl font-semibold tracking-tight">Unlock your space</h1>
-          <p className="text-sm text-zinc-500">
-            Choose a family member and enter their PIN to continue.
-          </p>
-        </header>
+    <ShellFrame>
+      <div className="max-w-2xl">
+        <Card title="Unlock">
+          <div className="text-sm text-zinc-600">
+            Choose your profile and enter your passcode to unlock editing (lists,
+            messages, and more).
+          </div>
 
-        <Card>
-          <form onSubmit={handleUnlock} className="space-y-4">
-            <label className="flex flex-col gap-2 text-sm font-medium">
-              Member
-              <select
-                className="rounded-xl border border-zinc-200 px-3 py-2 text-sm"
-                value={memberId}
-                onChange={(event) => setMemberId(event.target.value)}
-              >
-                {familyMembers.map((member) => (
-                  <option key={member.id} value={member.id}>
-                    {member.name} � {member.role}
-                  </option>
-                ))}
-              </select>
+          <div className="mt-5 grid gap-3">
+            <label className="text-xs font-semibold text-zinc-500">
+              Family Member
             </label>
+            <select
+              className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700"
+              value={selectedMemberId}
+              onChange={(e) => setSelectedMemberId(e.target.value)}
+            >
+              {familyMembers.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
 
-            <label className="flex flex-col gap-2 text-sm font-medium">
-              PIN
-              <input
-                type="password"
-                inputMode="numeric"
-                className="rounded-xl border border-zinc-200 px-3 py-2 text-sm"
-                value={pin}
-                onChange={(event) => setPin(event.target.value)}
-                placeholder="Enter 4-digit PIN"
-              />
+            <label className="mt-3 text-xs font-semibold text-zinc-500">
+              Passcode (PIN)
             </label>
+            <input
+              type="password"
+              inputMode="numeric"
+              className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700"
+              value={pin}
+              onChange={(e) => setPin(e.target.value)}
+              placeholder="Enter PIN"
+            />
 
-            {status === "error" ? (
-              <p className="text-sm text-red-500">
-                That PIN does not match. Try again.
-              </p>
-            ) : null}
-            {status === "success" ? (
-              <p className="text-sm text-green-600">
-                Unlocked! You can head back to the dashboard.
-              </p>
+            {error ? (
+              <div className="mt-2 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
+                {error}
+              </div>
             ) : null}
 
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="mt-4 flex flex-wrap gap-2">
               <button
-                type="submit"
-                className="rounded-full bg-zinc-900 px-5 py-2 text-sm font-semibold text-white"
+                type="button"
+                onClick={handleUnlock}
+                className="btnPrimary rounded-full px-5 py-2 text-xs font-semibold uppercase tracking-[0.2em]"
               >
                 Unlock
               </button>
-              <button
-                type="button"
-                onClick={handleClear}
-                className="rounded-full border border-zinc-200 px-5 py-2 text-sm font-semibold text-zinc-600"
+
+              {unlockedMemberId ? (
+                <button
+                  type="button"
+                  onClick={handleLock}
+                  className="btnSecondary rounded-full px-5 py-2 text-xs font-semibold uppercase tracking-[0.2em]"
+                >
+                  Lock
+                </button>
+              ) : null}
+
+              <Link
+                href="/"
+                className="btnSecondary rounded-full px-5 py-2 text-xs font-semibold uppercase tracking-[0.2em]"
               >
-                Clear session
-              </button>
+                Back Home
+              </Link>
             </div>
-          </form>
-        </Card>
 
-        <ProfileSetupModal defaultOpen />
-
-        <Card>
-          <div className="text-xs text-zinc-500">
-            Session stored locally: {session ? `${session.memberId} unlocked` : "none"}.
-            TODO: Replace with secure auth + server session.
+            <div className="mt-4 text-xs text-zinc-500">
+              Tip: If you haven’t set up your profile yet, use the Profile Setup
+              modal.
+            </div>
           </div>
         </Card>
+
+        {/* Optional: keep the setup modal available from here */}
+        <ProfileSetupModal
+          open={!selectedMember && familyMembers.length === 0}
+          onClose={() => void 0}
+        />
       </div>
-    </div>
+    </ShellFrame>
   );
 }
