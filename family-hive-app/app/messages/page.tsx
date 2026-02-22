@@ -19,6 +19,11 @@ export default function MessagesPage() {
   const user = useSupabaseUser();
   const [messages, setMessages] = useState<FamilyMessage[]>(familyMessages);
   const [draft, setDraft] = useState("");
+  const displayName = useMemo(() => {
+    return (
+      (user?.user_metadata?.display_name as string | undefined) ?? user?.email
+    );
+  }, [user?.email, user?.user_metadata?.display_name]);
   const activeMemberId = useMemo(() => {
     if (!user?.email) {
       return familyMembers[0]?.id ?? "family";
@@ -115,7 +120,9 @@ export default function MessagesPage() {
                 <div className="text-xs text-zinc-400">
                   Posting as{" "}
                   <span className="font-semibold text-zinc-600">
-                    {memberLookup.get(activeMemberId)?.name ?? "Family member"}
+                    {displayName ??
+                      memberLookup.get(activeMemberId)?.name ??
+                      "Family member"}
                   </span>
                 </div>
                 <button
@@ -141,38 +148,42 @@ export default function MessagesPage() {
             <div className="space-y-3">
               {messages.map((message) => {
                 const author = memberLookup.get(message.authorId);
+                const authorLabel =
+                  message.authorId === activeMemberId && displayName
+                    ? displayName
+                    : author?.name ?? message.authorId;
                 return (
                   <div
                     key={message.id}
                     className="rounded-2xl bg-zinc-50 px-4 py-3"
                   >
-                  <div className="flex items-start gap-3">
-                    <Avatar memberId={message.authorId} size={28} />
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between text-xs text-zinc-400">
-                        <span className="font-semibold text-zinc-600">
-                          {author?.name ?? message.authorId}
-                        </span>
-                        <span>
-                          {new Date(message.timestamp).toLocaleString(
-                            undefined,
-                            {
-                              month: "short",
-                              day: "numeric",
-                              hour: "numeric",
-                              minute: "2-digit",
-                            }
-                          )}
-                        </span>
-                      </div>
-                      <div className="mt-2 text-sm text-zinc-600">
-                        {message.text}
+                    <div className="flex items-start gap-3">
+                      <Avatar memberId={message.authorId} size={28} />
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between text-xs text-zinc-400">
+                          <span className="font-semibold text-zinc-600">
+                            {authorLabel}
+                          </span>
+                          <span>
+                            {new Date(message.timestamp).toLocaleString(
+                              undefined,
+                              {
+                                month: "short",
+                                day: "numeric",
+                                hour: "numeric",
+                                minute: "2-digit",
+                              }
+                            )}
+                          </span>
+                        </div>
+                        <div className="mt-2 text-sm text-zinc-600">
+                          {message.text}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
             </div>
           </div>
         </Card>

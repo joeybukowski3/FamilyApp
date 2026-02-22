@@ -33,6 +33,12 @@ export default function PhotosPage() {
     return new Map(familyMembers.map((member) => [member.id, member]));
   }, []);
 
+  const displayName = useMemo(() => {
+    return (
+      (user?.user_metadata?.display_name as string | undefined) ?? user?.email
+    );
+  }, [user?.email, user?.user_metadata?.display_name]);
+
   const activeMemberId = useMemo(() => {
     if (!user?.email) {
       return familyMembers[0]?.id ?? "family";
@@ -159,6 +165,10 @@ export default function PhotosPage() {
         <div className="space-y-4">
           {posts.map((post) => {
             const author = memberLookup.get(post.createdByMemberId);
+            const authorLabel =
+              post.createdByMemberId === activeMemberId && displayName
+                ? displayName
+                : author?.name ?? "Family";
             return (
               <Card key={post.id}>
                 <div className="space-y-3">
@@ -173,7 +183,7 @@ export default function PhotosPage() {
                   <div className="flex items-center gap-3 text-xs text-zinc-400">
                     <Avatar memberId={post.createdByMemberId} size={28} />
                     <span className="font-semibold text-zinc-600">
-                      {author?.name ?? "Family"}
+                      {authorLabel}
                     </span>
                     <span>
                       {new Date(post.createdAt).toLocaleString(undefined, {
@@ -198,6 +208,11 @@ export default function PhotosPage() {
                         const commentAuthor = memberLookup.get(
                           comment.createdByMemberId
                         );
+                        const commentLabel =
+                          comment.createdByMemberId === activeMemberId &&
+                          displayName
+                            ? displayName
+                            : commentAuthor?.name ?? "Family";
                         return (
                           <div
                             key={comment.id}
@@ -211,7 +226,7 @@ export default function PhotosPage() {
                               <div className="flex-1">
                                 <div className="flex items-center justify-between text-[11px] text-zinc-400">
                                   <span className="font-semibold text-zinc-600">
-                                    {commentAuthor?.name ?? "Family"}
+                                    {commentLabel}
                                   </span>
                                   <span>
                                     {new Date(comment.createdAt).toLocaleString(

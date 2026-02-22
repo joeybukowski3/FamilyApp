@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
+import { useEffect } from "react";
 import ActiveMemberBadge from "@/app/components/ActiveMemberBadge";
+import useSupabaseUser from "@/app/lib/useSupabaseUser";
 
 type Props = {
   children: ReactNode;
@@ -119,6 +121,16 @@ export default function ShellFrame({
   familyName = "The Hive",
 }: Props) {
   const pathname = usePathname();
+  const router = useRouter();
+  const user = useSupabaseUser();
+
+  const displayName = user?.user_metadata?.display_name as string | undefined;
+
+  useEffect(() => {
+    if (user && !displayName && pathname !== "/setup") {
+      router.replace("/setup");
+    }
+  }, [displayName, pathname, router, user]);
 
   return (
     <div className="appShell">

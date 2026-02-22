@@ -31,6 +31,12 @@ export default function SchedulePage() {
     return new Map(familyMembers.map((member) => [member.id, member]));
   }, []);
 
+  const displayName = useMemo(() => {
+    return (
+      (user?.user_metadata?.display_name as string | undefined) ?? user?.email
+    );
+  }, [user?.email, user?.user_metadata?.display_name]);
+
   const activeMemberId = useMemo(() => {
     if (!user?.email) {
       return familyMembers[0]?.id ?? "family";
@@ -156,7 +162,9 @@ export default function SchedulePage() {
                 <div className="text-xs text-zinc-400">
                   Adding as{" "}
                   <span className="font-semibold text-zinc-600">
-                    {memberLookup.get(activeMemberId)?.name ?? "Family member"}
+                    {displayName ??
+                      memberLookup.get(activeMemberId)?.name ??
+                      "Family member"}
                   </span>
                 </div>
                 <button
@@ -195,6 +203,10 @@ export default function SchedulePage() {
             ) : (
               sortedEvents.map((event) => {
                 const creator = memberLookup.get(event.createdByMemberId);
+                const creatorLabel =
+                  event.createdByMemberId === activeMemberId && displayName
+                    ? displayName
+                    : creator?.name ?? "Family";
                 return (
                   <div
                     key={event.id}
@@ -220,7 +232,7 @@ export default function SchedulePage() {
                                 minute: "2-digit",
                               }
                             )}{" "}
-                            - {creator?.name ?? "Family"}
+                            - {creatorLabel}
                           </div>
                           {event.notes ? (
                             <div className="mt-2 text-xs text-zinc-500">

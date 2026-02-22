@@ -29,9 +29,12 @@ export default function ActiveMemberBadge() {
     );
   }
 
+  const displayName =
+    (user.user_metadata?.display_name as string | undefined) ?? user.email;
+
   return (
     <div className="flex items-center gap-3">
-      <div className="text-sm font-semibold text-zinc-700">{user.email}</div>
+      <div className="text-sm font-semibold text-zinc-700">{displayName}</div>
       <div className="flex items-center gap-2">
         <Link
           href="/unlock"
