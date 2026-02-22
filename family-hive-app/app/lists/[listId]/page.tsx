@@ -1,15 +1,49 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import Card from "@/app/components/Card";
 import ShellFrame from "@/app/components/ShellFrame";
 import { familyMembers } from "@/app/lib/mockData";
-import { listGroups, listItems } from "@/app/lib/listsMock";
+import { getSeedLists, hydrateLists, ListsState, saveLists } from "@/app/lib/listsStore";
 
 type Props = {
   params: { listId: string };
 };
 
 export default function ListDetailPage({ params }: Props) {
-  const group = listGroups.find((entry) => entry.id === params.listId);
+  const [lists, setLists] = useState<ListsState>(getSeedLists);
+  const [draft, setDraft] = useState("");
+  const [hideCompleted, setHideCompleted] = useState(false);
+  const [activeMemberId, setActiveMemberId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLists(hydrateLists());
+
+    if (typeof window === "undefined") return;
+    const storedSession = window.localStorage.getItem("family-hive-session");
+    if (!storedSession) return;
+
+    try {
+      const parsed = JSON.parse(storedSession) as {
+        memberId?: string;
+        unlocked?: boolean;
+      };
+      if (parsed.unlocked && parsed.memberId) {
+        setActiveMemberId(parsed.memberId);
+      }
+    } catch {
+      window.localStorage.removeItem("family-hive-session");
+    }
+  }, []);
+
+  const group = lists.groups.find((entry) => entry.id === params.listId);
+
+  const memberLookup = useMemo(() => {
+    return new Map(familyMembers.map((member) => [member.id, member]));
+  }, []);
+
+  const canEdit = Boolean(activeMemberId);
 
   if (!group) {
     return (
@@ -26,7 +60,50 @@ export default function ListDetailPage({ params }: Props) {
     );
   }
 
-  const items = listItems.filter((item) => item.listId === group.id);
+  const listItems = lists.items.filter((item) => item.listId === group.id);
+  const incompleteItems = listItems.filter((item) => !item.completedAt);
+  const completedItems = listItems.filter((item) => item.completedAt);
+  const visibleItems = hideCompleted
+    ? incompleteItems
+    : [...incompleteItems, ...completedItems];
+
+  const handleAddItem = () => {
+    if (!canEdit || !activeMemberId) return;
+    const trimmed = draft.trim();
+    if (!trimmed) return;
+
+    const nextItem = {
+      id: `item-${Date.now()}`,
+      listId: group.id,
+      text: trimmed,
+      createdAt: new Date().toISOString(),
+      createdByMemberId: activeMemberId,
+    };
+
+    setLists((prev) => {
+      const updated = { ...prev, items: [nextItem, ...prev.items] };
+      saveLists(updated);
+      return updated;
+    });
+    setDraft("");
+  };
+
+  const handleToggleComplete = (itemId: string) => {
+    if (!canEdit) return;
+
+    setLists((prev) => {
+      const updatedItems = prev.items.map((item) => {
+        if (item.id !== itemId) return item;
+        return {
+          ...item,
+          completedAt: item.completedAt ? undefined : new Date().toISOString(),
+        };
+      });
+      const updated = { ...prev, items: updatedItems };
+      saveLists(updated);
+      return updated;
+    });
+  };
 
   return (
     <ShellFrame>
@@ -40,41 +117,64 @@ export default function ListDetailPage({ params }: Props) {
               {items.length} item{items.length === 1 ? "" : "s"}
             </p>
           </div>
-          <button
-            type="button"
-            className="rounded-full border border-zinc-200 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500"
-            disabled
-          >
-            Hide completed
-          </button>
           <div className="flex flex-1 flex-wrap items-center gap-2 sm:justify-end">
             <input
               type="text"
               placeholder="Add item..."
               className="w-full rounded-full border border-zinc-200 px-4 py-2 text-xs text-zinc-600 sm:w-56"
-              disabled
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              disabled={!canEdit}
             />
             <button
               type="button"
-              className="rounded-full bg-zinc-900 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-white opacity-60"
-              disabled
+              onClick={handleAddItem}
+              className={`rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-white ${
+                canEdit ? "bg-zinc-900" : "bg-zinc-300"
+              }`}
+              disabled={!canEdit}
             >
               Add Item
             </button>
           </div>
         </div>
 
+        {!canEdit ? (
+          <div className="mt-3 rounded-2xl bg-zinc-50 px-4 py-3 text-xs text-zinc-500">
+            Unlock to add or complete items.{" "}
+            <Link href="/unlock" className="font-semibold text-zinc-700">
+              Go to unlock
+            </Link>
+          </div>
+        ) : null}
+
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-500">
+          <span>
+            {listItems.length} item{listItems.length === 1 ? "" : "s"}
+          </span>
+          <button
+            type="button"
+            onClick={() => setHideCompleted((prev) => !prev)}
+            className="rounded-full border border-zinc-200 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500"
+          >
+            {hideCompleted ? "Show completed" : "Hide completed"}
+          </button>
+        </div>
+
         <div className="mt-4 space-y-3">
-          {items.map((item) => {
-            const creator = familyMembers.find(
-              (member) => member.id === item.createdByMemberId
-            );
+          {visibleItems.map((item) => {
+            const creator = memberLookup.get(item.createdByMemberId);
             return (
               <label
                 key={item.id}
                 className="flex items-start gap-3 rounded-2xl bg-zinc-50 px-4 py-3 text-sm text-zinc-600"
               >
-                <input type="checkbox" checked={Boolean(item.completedAt)} readOnly />
+                <input
+                  type="checkbox"
+                  checked={Boolean(item.completedAt)}
+                  onChange={() => handleToggleComplete(item.id)}
+                  disabled={!canEdit}
+                />
                 <div className="flex-1">
                   <div
                     className={`font-medium ${
@@ -85,7 +185,12 @@ export default function ListDetailPage({ params }: Props) {
                   </div>
                   <div className="mt-1 text-xs text-zinc-400">
                     {creator?.name ?? "Family"} ·{" "}
-                    {new Date(item.createdAt).toLocaleDateString()}
+                    {new Date(item.createdAt).toLocaleString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
                   </div>
                 </div>
               </label>

@@ -13,14 +13,21 @@ export type ListItem = {
   completedAt?: string;
 };
 
-export const listGroups: ListGroup[] = [
+export type ListsState = {
+  groups: ListGroup[];
+  items: ListItem[];
+};
+
+const STORAGE_KEY = "family_lists_v1";
+
+const seedGroups: ListGroup[] = [
   { id: "todo", title: "To-Do", type: "todo" },
   { id: "wishlist", title: "Wish List", type: "wishlist" },
   { id: "christmas", title: "Christmas List", type: "christmas" },
   { id: "custom", title: "Custom", type: "custom" },
 ];
 
-export const listItems: ListItem[] = [
+const seedItems: ListItem[] = [
   {
     id: "todo-1",
     listId: "todo",
@@ -65,3 +72,46 @@ export const listItems: ListItem[] = [
     createdByMemberId: "morgan",
   },
 ];
+
+export const getSeedLists = (): ListsState => ({
+  groups: seedGroups,
+  items: seedItems,
+});
+
+const isValidState = (data: unknown): data is ListsState => {
+  if (!data || typeof data !== "object") return false;
+  const candidate = data as ListsState;
+  return Array.isArray(candidate.groups) && Array.isArray(candidate.items);
+};
+
+export const hydrateLists = (): ListsState => {
+  if (typeof window === "undefined") {
+    return getSeedLists();
+  }
+
+  const stored = window.localStorage.getItem(STORAGE_KEY);
+  if (!stored) {
+    const seed = getSeedLists();
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(seed));
+    return seed;
+  }
+
+  try {
+    const parsed = JSON.parse(stored);
+    if (isValidState(parsed)) {
+      return parsed;
+    }
+  } catch {
+    // fallthrough to reseed
+  }
+
+  window.localStorage.removeItem(STORAGE_KEY);
+  const seed = getSeedLists();
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(seed));
+  return seed;
+};
+
+export const saveLists = (state: ListsState) => {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+};

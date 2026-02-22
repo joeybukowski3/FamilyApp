@@ -1,14 +1,23 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import Card from "@/app/components/Card";
 import ShellFrame from "@/app/components/ShellFrame";
-import { listGroups, listItems } from "@/app/lib/listsMock";
+import { getSeedLists, hydrateLists, ListsState } from "@/app/lib/listsStore";
 
 export default function ListsPage() {
+  const [lists, setLists] = useState<ListsState>(getSeedLists);
+
+  useEffect(() => {
+    setLists(hydrateLists());
+  }, []);
+
   return (
     <ShellFrame>
       <div className="grid gap-4 lg:grid-cols-2">
-        {listGroups.map((group) => {
-          const items = listItems.filter((item) => item.listId === group.id);
+        {lists.groups.map((group) => {
+          const items = lists.items.filter((item) => item.listId === group.id);
           return (
             <Card key={group.id} title={group.title}>
               <Link
