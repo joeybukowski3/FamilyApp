@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import Card from "@/app/components/Card";
 import ShellFrame from "@/app/components/ShellFrame";
+import Avatar from "@/app/components/Avatar";
 import { familyMembers } from "@/app/lib/mockData";
 import {
   getSeedLists,
@@ -204,6 +205,7 @@ export default function ListDetailPage() {
                   onChange={() => handleToggleComplete(item.id)}
                   disabled={!canEdit}
                 />
+                <Avatar memberId={item.createdByMemberId} size={28} />
                 <div className="flex-1">
                   <div
                     className={`font-medium ${

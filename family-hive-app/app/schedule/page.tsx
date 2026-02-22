@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import Card from "@/app/components/Card";
 import PageHeader from "@/app/components/PageHeader";
 import ShellFrame from "@/app/components/ShellFrame";
+import Avatar from "@/app/components/Avatar";
 import { familyMembers } from "@/app/lib/mockData";
 import {
   FamilyEvent,
@@ -199,24 +200,33 @@ export default function SchedulePage() {
                     className="rounded-2xl bg-zinc-50 px-4 py-3"
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="text-sm font-semibold text-zinc-700">
-                          {event.title}
-                        </div>
-                        <div className="mt-1 text-xs text-zinc-400">
-                          {new Date(event.startISO).toLocaleString(undefined, {
-                            month: "short",
-                            day: "numeric",
-                            hour: "numeric",
-                            minute: "2-digit",
-                          })}{" "}
-                          - {creator?.name ?? "Family"}
-                        </div>
-                        {event.notes ? (
-                          <div className="mt-2 text-xs text-zinc-500">
-                            {event.notes}
+                      <div className="flex items-start gap-3">
+                        <Avatar
+                          memberId={event.createdByMemberId}
+                          size={28}
+                        />
+                        <div>
+                          <div className="text-sm font-semibold text-zinc-700">
+                            {event.title}
                           </div>
-                        ) : null}
+                          <div className="mt-1 text-xs text-zinc-400">
+                            {new Date(event.startISO).toLocaleString(
+                              undefined,
+                              {
+                                month: "short",
+                                day: "numeric",
+                                hour: "numeric",
+                                minute: "2-digit",
+                              }
+                            )}{" "}
+                            - {creator?.name ?? "Family"}
+                          </div>
+                          {event.notes ? (
+                            <div className="mt-2 text-xs text-zinc-500">
+                              {event.notes}
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
                       {canEdit ? (
                         <button

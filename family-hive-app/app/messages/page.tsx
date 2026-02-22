@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Card from "@/app/components/Card";
 import PageHeader from "@/app/components/PageHeader";
 import ShellFrame from "@/app/components/ShellFrame";
+import Avatar from "@/app/components/Avatar";
 import {
   familyMembers,
   familyMessages,
@@ -136,25 +137,33 @@ export default function MessagesPage() {
                     key={message.id}
                     className="rounded-2xl bg-zinc-50 px-4 py-3"
                   >
-                    <div className="flex items-center justify-between text-xs text-zinc-400">
-                      <span className="font-semibold text-zinc-600">
-                        {author?.name ?? message.authorId}
-                      </span>
-                      <span>
-                        {new Date(message.timestamp).toLocaleString(undefined, {
-                          month: "short",
-                          day: "numeric",
-                          hour: "numeric",
-                          minute: "2-digit",
-                        })}
-                      </span>
-                    </div>
-                    <div className="mt-2 text-sm text-zinc-600">
-                      {message.text}
+                  <div className="flex items-start gap-3">
+                    <Avatar memberId={message.authorId} size={28} />
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between text-xs text-zinc-400">
+                        <span className="font-semibold text-zinc-600">
+                          {author?.name ?? message.authorId}
+                        </span>
+                        <span>
+                          {new Date(message.timestamp).toLocaleString(
+                            undefined,
+                            {
+                              month: "short",
+                              day: "numeric",
+                              hour: "numeric",
+                              minute: "2-digit",
+                            }
+                          )}
+                        </span>
+                      </div>
+                      <div className="mt-2 text-sm text-zinc-600">
+                        {message.text}
+                      </div>
                     </div>
                   </div>
-                );
-              })}
+                </div>
+              );
+            })}
             </div>
           </div>
         </Card>

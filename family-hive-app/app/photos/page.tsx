@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import Card from "@/app/components/Card";
 import PageHeader from "@/app/components/PageHeader";
 import ShellFrame from "@/app/components/ShellFrame";
+import Avatar from "@/app/components/Avatar";
 import { familyMembers } from "@/app/lib/mockData";
 import {
   PhotoPost,
@@ -168,17 +169,19 @@ export default function PhotosPage() {
                     />
                   </div>
                   <div className="text-sm text-zinc-700">{post.caption}</div>
-                  <div className="text-xs text-zinc-400">
+                  <div className="flex items-center gap-3 text-xs text-zinc-400">
+                    <Avatar memberId={post.createdByMemberId} size={28} />
                     <span className="font-semibold text-zinc-600">
                       {author?.name ?? "Family"}
-                    </span>{" "}
-                    -{" "}
-                    {new Date(post.createdAt).toLocaleString(undefined, {
-                      month: "short",
-                      day: "numeric",
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })}
+                    </span>
+                    <span>
+                      {new Date(post.createdAt).toLocaleString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })}
+                    </span>
                   </div>
 
                   <div className="space-y-2">
@@ -199,23 +202,31 @@ export default function PhotosPage() {
                             key={comment.id}
                             className="rounded-2xl bg-zinc-50 px-3 py-2 text-xs text-zinc-600"
                           >
-                            <div className="flex items-center justify-between text-[11px] text-zinc-400">
-                              <span className="font-semibold text-zinc-600">
-                                {commentAuthor?.name ?? "Family"}
-                              </span>
-                              <span>
-                                {new Date(comment.createdAt).toLocaleString(
-                                  undefined,
-                                  {
-                                    month: "short",
-                                    day: "numeric",
-                                    hour: "numeric",
-                                    minute: "2-digit",
-                                  }
-                                )}
-                              </span>
+                            <div className="flex items-start gap-2">
+                              <Avatar
+                                memberId={comment.createdByMemberId}
+                                size={22}
+                              />
+                              <div className="flex-1">
+                                <div className="flex items-center justify-between text-[11px] text-zinc-400">
+                                  <span className="font-semibold text-zinc-600">
+                                    {commentAuthor?.name ?? "Family"}
+                                  </span>
+                                  <span>
+                                    {new Date(comment.createdAt).toLocaleString(
+                                      undefined,
+                                      {
+                                        month: "short",
+                                        day: "numeric",
+                                        hour: "numeric",
+                                        minute: "2-digit",
+                                      }
+                                    )}
+                                  </span>
+                                </div>
+                                <div className="mt-1">{comment.text}</div>
+                              </div>
                             </div>
-                            <div className="mt-1">{comment.text}</div>
                           </div>
                         );
                       })
