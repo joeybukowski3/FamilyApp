@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import Card from "@/app/components/Card";
+import PageHeader from "@/app/components/PageHeader";
 import ShellFrame from "@/app/components/ShellFrame";
 import { familyMembers } from "@/app/lib/mockData";
 import {
@@ -90,7 +91,35 @@ export default function SchedulePage() {
 
   return (
     <ShellFrame>
-      <div className="space-y-4">
+      <div className="space-y-4 accent-sun">
+        <PageHeader
+          title="Schedule"
+          subtitle="Upcoming family plans and reminders."
+          accent="sun"
+          icon={
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M7 3v3M17 3v3M4 8h16M6 12h4m4 0h4M6 16h4m4 0h4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
+              <rect
+                x="3"
+                y="5"
+                width="18"
+                height="16"
+                rx="2"
+                ry="2"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              />
+            </svg>
+          }
+        />
+
         <Card title="Add Event">
           {canEdit ? (
             <div className="space-y-3">
@@ -131,7 +160,7 @@ export default function SchedulePage() {
                 <button
                   type="button"
                   onClick={handleAddEvent}
-                  className="btnPrimary rounded-full px-5 py-2 text-xs font-semibold uppercase tracking-[0.2em]"
+                  className="btnAccent rounded-full px-5 py-2 text-xs font-semibold uppercase tracking-[0.2em]"
                 >
                   Add Event
                 </button>

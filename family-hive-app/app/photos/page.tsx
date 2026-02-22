@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import Card from "@/app/components/Card";
+import PageHeader from "@/app/components/PageHeader";
 import ShellFrame from "@/app/components/ShellFrame";
 import { familyMembers } from "@/app/lib/mockData";
 import {
@@ -108,20 +109,37 @@ export default function PhotosPage() {
 
   return (
     <ShellFrame>
-      <div className="space-y-4">
-        <Card>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-semibold text-zinc-700">Photos</div>
-              <div className="text-xs text-zinc-400">
-                Shared family photo roll
-              </div>
-            </div>
-            {canEdit ? (
+      <div className="space-y-4 accent-coral">
+        <PageHeader
+          title="Photos"
+          subtitle="Shared family photo roll."
+          accent="coral"
+          icon={
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M4 6h5l2-2h6l2 2h1a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Z"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <circle
+                cx="12"
+                cy="13"
+                r="3"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              />
+            </svg>
+          }
+          right={
+            canEdit ? (
               <button
                 type="button"
                 onClick={handleOpenModal}
-                className="btnPrimary rounded-full px-5 py-2 text-xs font-semibold uppercase tracking-[0.2em]"
+                className="btnAccent rounded-full px-5 py-2 text-xs font-semibold uppercase tracking-[0.2em]"
               >
                 New Post
               </button>
@@ -132,9 +150,9 @@ export default function PhotosPage() {
                   Go to unlock
                 </Link>
               </div>
-            )}
-          </div>
-        </Card>
+            )
+          }
+        />
 
         <div className="space-y-4">
           {posts.map((post) => {
@@ -245,7 +263,7 @@ export default function PhotosPage() {
       </div>
 
       {isModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 accent-coral">
           <Card className="w-full max-w-lg">
             <div className="space-y-3">
               <div className="text-sm font-semibold text-zinc-700">
@@ -275,7 +293,7 @@ export default function PhotosPage() {
                 <button
                   type="button"
                   onClick={handleCreatePost}
-                  className="btnPrimary rounded-full px-5 py-2 text-xs font-semibold uppercase tracking-[0.2em]"
+                  className="btnAccent rounded-full px-5 py-2 text-xs font-semibold uppercase tracking-[0.2em]"
                 >
                   Post
                 </button>

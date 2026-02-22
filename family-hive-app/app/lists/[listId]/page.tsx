@@ -133,7 +133,8 @@ export default function ListDetailPage() {
 
   return (
     <ShellFrame>
-      <Card>
+      <div className="accent-mint">
+        <Card>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="text-sm font-semibold text-zinc-700">
@@ -159,7 +160,7 @@ export default function ListDetailPage() {
             <button
               type="button"
               onClick={handleAddItem}
-              className="btnPrimary rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em]"
+              className="btnAccent rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em]"
               disabled={!canEdit}
             >
               Add Item
@@ -225,7 +226,9 @@ export default function ListDetailPage() {
             );
           })}
         </div>
-      </Card>
+        </Card>
+      </div>
     </ShellFrame>
   );
 }
+
