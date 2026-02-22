@@ -20,3 +20,31 @@ export const memberPins: Record<string, string> = {
 };
 
 export const familyName = "The Hive";
+
+export type FamilyMessage = {
+  id: string;
+  authorId: string;
+  text: string;
+  timestamp: string;
+};
+
+export const familyMessages: FamilyMessage[] = [
+  {
+    id: "msg-1",
+    authorId: "alex",
+    text: "Movie night is Friday. Add picks to the list!",
+    timestamp: "2026-02-21T19:30:00.000Z",
+  },
+  {
+    id: "msg-2",
+    authorId: "morgan",
+    text: "Can someone grab extra milk?",
+    timestamp: "2026-02-21T16:10:00.000Z",
+  },
+  {
+    id: "msg-3",
+    authorId: "jules",
+    text: "I will be late to dinner tonight.",
+    timestamp: "2026-02-20T22:05:00.000Z",
+  },
+];
