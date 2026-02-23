@@ -117,7 +117,7 @@ const nav = [
 
 export default function ShellFrame({
   children,
-  familyName = "The Hive",
+  familyName = "Bukowski's",
 }: Props) {
   const pathname = usePathname();
   const user = useSupabaseUser();

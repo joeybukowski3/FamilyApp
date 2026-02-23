@@ -20,7 +20,7 @@ export const memberPins: Record<string, string> = {
   joseph: "1102",
 };
 
-export const familyName = "The Hive";
+export const familyName = "Bukowski's";
 
 export type FamilyMessage = {
   id: string;
