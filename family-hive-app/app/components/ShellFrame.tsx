@@ -1,9 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import { useEffect } from "react";
 import ActiveMemberBadge from "@/app/components/ActiveMemberBadge";
 import useSupabaseUser from "@/app/lib/useSupabaseUser";
 
@@ -121,16 +120,9 @@ export default function ShellFrame({
   familyName = "The Hive",
 }: Props) {
   const pathname = usePathname();
-  const router = useRouter();
   const user = useSupabaseUser();
 
   const displayName = user?.user_metadata?.display_name as string | undefined;
-
-  useEffect(() => {
-    if (user && !displayName && pathname !== "/setup") {
-      router.replace("/setup");
-    }
-  }, [displayName, pathname, router, user]);
 
   return (
     <div className="appShell">
@@ -186,7 +178,17 @@ export default function ShellFrame({
           </nav>
         </aside>
 
-        <main className="mainContent">{children}</main>
+        <main className="mainContent">
+          {user && !displayName && pathname !== "/setup" ? (
+            <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              Finish setting up your display name.{" "}
+              <Link href="/setup" className="font-semibold text-amber-900">
+                Finish setup
+              </Link>
+            </div>
+          ) : null}
+          {children}
+        </main>
       </div>
     </div>
   );
