@@ -91,9 +91,9 @@ export default function DashboardPage() {
 
           <Card title="Family Schedule">
             <div className="grid grid-cols-7 gap-2 text-center text-[10px] text-zinc-400">
-              {"SMTWTFS".split("").map((day) => (
-                <div key={day}>{day}</div>
-              ))}
+            {"SMTWTFS".split("").map((day, i) => (
+  <div key={`${day}-${i}`}>{day}</div>
+))}
             </div>
             <div className="mt-2 grid grid-cols-7 gap-2">
               {Array.from({ length: 28 }).map((_, index) => (
