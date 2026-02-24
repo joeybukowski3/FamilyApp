@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import Card from "@/app/components/Card";
 import ShellFrame from "@/app/components/ShellFrame";
 import Avatar from "@/app/components/Avatar";
 import useSupabaseUser from "@/app/lib/useSupabaseUser";
+import { supabase } from "@/app/lib/supabaseClient";
 import { familyMembers } from "@/app/lib/mockData";
 import {
   getSeedLists,
@@ -17,15 +18,43 @@ import {
 
 export default function ListDetailPage() {
   const user = useSupabaseUser();
+  const router = useRouter();
   const [lists, setLists] = useState<ListsState>(getSeedLists);
   const [draft, setDraft] = useState("");
   const [hideCompleted, setHideCompleted] = useState(false);
+  const [isAuthorized, setIsAuthorized] = useState(false);
 
   const routeParams = useParams();
   const listIdRaw = routeParams?.listId;
   const listId = Array.isArray(listIdRaw)
     ? listIdRaw[0]
     : (listIdRaw as string | undefined);
+
+  // 1. Protection Gatekeeper: Check for User and PIN
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { user: activeUser } } = await supabase.auth.getUser();
+      
+      if (!activeUser) {
+        router.push("/unlock");
+        return;
+      }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('pin_hash')
+        .eq('id', activeUser.id)
+        .single();
+
+      if (!profile?.pin_hash) {
+        router.push("/unlock");
+      } else {
+        setIsAuthorized(true);
+      }
+    };
+    
+    checkAuth();
+  }, [router]);
 
   useEffect(() => {
     setLists(hydrateLists());
@@ -57,7 +86,10 @@ export default function ListDetailPage() {
     );
   }, [user?.email]);
 
-  const canEdit = Boolean(user);
+  const canEdit = Boolean(user) && isAuthorized;
+
+  // Render nothing while checking authorization to prevent flickering
+  if (!isAuthorized) return null;
 
   // Guard: route param missing
   if (!listId || typeof listId !== "string") {
@@ -175,15 +207,6 @@ export default function ListDetailPage() {
               </button>
             </div>
           </div>
-
-          {!canEdit ? (
-            <div className="mt-3 rounded-2xl bg-zinc-50 px-4 py-3 text-xs text-zinc-500">
-              Unlock to add or complete items.{" "}
-              <Link href="/unlock" className="font-semibold text-zinc-700">
-                Go to unlock
-              </Link>
-            </div>
-          ) : null}
 
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-500">
             <span>
