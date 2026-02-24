@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -226,7 +226,7 @@ export default function ListDetailPage() {
                       {item.text}
                     </div>
                     <div className="mt-1 text-xs text-zinc-400">
-                      {creatorLabel} �{" "}
+                      {creatorLabel} •{" "}
                       {new Date(item.createdAt).toLocaleString(undefined, {
                         month: "short",
                         day: "numeric",
