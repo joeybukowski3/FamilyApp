@@ -20,25 +20,16 @@ export default function MessagesPage() {
   const [messages, setMessages] = useState<FamilyMessage[]>(familyMessages);
   const [draft, setDraft] = useState("");
   const displayName = useMemo(() => {
-    return (
-      (user?.user_metadata?.display_name as string | undefined) ?? user?.email
-    );
-  }, [user?.email, user?.user_metadata?.display_name]);
+    return user?.user_metadata?.display_name as string | undefined;
+  }, [user?.user_metadata?.display_name]);
+
   const activeMemberId = useMemo(() => {
-    if (!user?.email) {
-      return familyMembers[0]?.id ?? "family";
-    }
-    const local = user.email.split("@")[0]?.toLowerCase() ?? "";
-    return (
-      familyMembers.find(
-        (member) =>
-          member.id.toLowerCase() === local ||
-          member.name.toLowerCase() === local
-      )?.id ??
-      familyMembers[0]?.id ??
-      "family"
-    );
-  }, [user?.email]);
+    if (!user?.id) return "family";
+    // Using the user id from our authStore which is the lowercase username
+    return familyMembers.find(
+      (m) => m.id.toLowerCase() === user.id.toLowerCase()
+    )?.id ?? "family";
+  }, [user?.id]);
   const canEdit = Boolean(user);
 
   useEffect(() => {
@@ -139,8 +130,8 @@ export default function MessagesPage() {
             {!canEdit ? (
               <div className="rounded-2xl bg-zinc-50 px-4 py-3 text-xs text-zinc-500">
                 Unlock to post messages.{" "}
-                <Link href="/unlock" className="font-semibold text-zinc-700">
-                  Go to unlock
+                <Link href="/login" className="font-semibold text-zinc-700">
+                  Go to sign in
                 </Link>
               </div>
             ) : null}

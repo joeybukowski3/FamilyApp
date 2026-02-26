@@ -3,26 +3,26 @@
 import { useEffect, useState } from "react";
 import { getAuthUser } from "@/app/lib/authStore";
 
-// Renamed logic to use our custom authStore while keeping the hook name for compatibility
-export default function useSupabaseUser() {
-  const [user, setUser] = useState<any>(null);
+export default function useAuthUser() {
+  // Use 'undefined' to represent the "loading/checking" state.
+  // 'null' will explicitly mean "not logged in".
+  const [user, setUser] = useState<any>(undefined);
 
   useEffect(() => {
-    // Initial fetch of the authenticated user
-    setUser(getAuthUser());
-
-    // Listen for auth-change events to update the user state
-    const handleAuthChange = () => {
-      setUser(getAuthUser());
+    // Check session on the client immediately after mount
+    const checkAuth = () => {
+      setUser(getAuthUser() || null);
     };
 
-    window.addEventListener("auth-change", handleAuthChange);
-    // Also listen for storage changes (in case of other tabs/windows)
-    window.addEventListener("storage", handleAuthChange);
+    checkAuth();
+
+    // Listen for auth-change events to update the user state across components
+    window.addEventListener("auth-change", checkAuth);
+    window.addEventListener("storage", checkAuth);
 
     return () => {
-      window.removeEventListener("auth-change", handleAuthChange);
-      window.removeEventListener("storage", handleAuthChange);
+      window.removeEventListener("auth-change", checkAuth);
+      window.removeEventListener("storage", checkAuth);
     };
   }, []);
 

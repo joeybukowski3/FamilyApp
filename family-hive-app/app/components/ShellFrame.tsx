@@ -126,10 +126,17 @@ export default function ShellFrame({
 
   const displayName = user?.user_metadata?.display_name as string | undefined;
 
-  // Enforce authentication: redirect unauthenticated users to /login
+  // Enforce authentication: handle redirects correctly
   useEffect(() => {
-    if (!user && pathname !== "/login") {
+    // If the user state is still "checking" (undefined), don't redirect yet
+    if (user === undefined) return;
+
+    if (user === null && pathname !== "/login") {
+      // Not logged in -> go to login
       router.push("/login");
+    } else if (user !== null && pathname === "/login") {
+      // Already logged in -> go home
+      router.push("/");
     }
   }, [user, pathname, router]);
 

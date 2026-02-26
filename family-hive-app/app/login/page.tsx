@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Card from "@/app/components/Card";
 import ShellFrame from "@/app/components/ShellFrame";
 import { login } from "@/app/lib/authStore";
+import useSupabaseUser from "@/app/lib/useSupabaseUser";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
@@ -12,6 +13,14 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const user = useSupabaseUser();
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (user) {
+      router.replace("/");
+    }
+  }, [user, router]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
