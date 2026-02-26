@@ -178,7 +178,7 @@ export default function ShellFrame({
           </nav>
         </aside>
 
-        <main className="mainContent">
+        <main className="mainContent container">
           {user && !displayName && pathname !== "/setup" ? (
             <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
               Finish setting up your display name.{" "}
@@ -190,6 +190,12 @@ export default function ShellFrame({
           {children}
         </main>
       </div>
+
+      <footer className="mt-auto border-t border-zinc-200 bg-white p-6 text-center text-xs text-zinc-400">
+        <div className="container">
+          <p>© 2026 Family Hive. All rights reserved.</p>
+        </div>
+      </footer>
     </div>
   );
 }
