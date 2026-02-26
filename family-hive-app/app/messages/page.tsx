@@ -9,7 +9,8 @@ import useSupabaseUser from "@/app/lib/useSupabaseUser";
 import { supabase } from "@/app/lib/supabaseClient";
 import { familyMembers, FamilyMessage } from "@/app/lib/mockData";
 
-const FAMILY_ID = "family_1";
+// Using a valid UUID format to match the Supabase column type
+const FAMILY_ID = "00000000-0000-0000-0000-000000000001";
 
 export default function MessagesPage() {
   const user = useSupabaseUser();
@@ -25,11 +26,6 @@ export default function MessagesPage() {
   }, [user?.id]);
   
   useEffect(() => {
-    // 1. Debug: Confirm variables are loaded
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "MISSING";
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? "LOADED" : "MISSING";
-    setDebug(`URL: ${url.substring(0, 15)}... | Key: ${key}`);
-
     const fetchMessages = async () => {
       setLoading(true);
       const { data, error } = await supabase
@@ -49,17 +45,12 @@ export default function MessagesPage() {
 
     fetchMessages();
 
-    // 2. Realtime with custom settings
-    const channel = supabase.channel('room_1', {
-      config: {
-        broadcast: { self: true },
-        presence: { key: activeMemberId },
-      }
-    })
+    const channel = supabase.channel('messages-sync')
     .on('postgres_changes', { 
       event: 'INSERT', 
       schema: 'public', 
-      table: 'messages' 
+      table: 'messages',
+      filter: `family_id=eq.${FAMILY_ID}`
     }, (payload) => {
       const newMessage: FamilyMessage = {
         id: payload.new.id,

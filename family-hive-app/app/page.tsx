@@ -5,7 +5,7 @@ import Card from "@/app/components/Card";
 import ShellFrame from "@/app/components/ShellFrame";
 import { supabase } from "@/app/lib/supabaseClient";
 
-const FAMILY_ID = "family_1";
+const FAMILY_ID = "00000000-0000-0000-0000-000000000001";
 
 export default function DashboardPage() {
   const [todos, setTodos] = useState<any[]>([]);

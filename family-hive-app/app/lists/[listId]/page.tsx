@@ -10,7 +10,7 @@ import useSupabaseUser from "@/app/lib/useSupabaseUser";
 import { supabase } from "@/app/lib/supabaseClient";
 import { familyMembers } from "@/app/lib/mockData";
 
-const FAMILY_ID = "family_1";
+const FAMILY_ID = "00000000-0000-0000-0000-000000000001";
 
 export default function ListDetailPage() {
   const user = useSupabaseUser();

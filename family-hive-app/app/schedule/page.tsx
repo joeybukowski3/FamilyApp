@@ -12,7 +12,7 @@ import { familyMembers } from "@/app/lib/mockData";
 import { FamilyEvent } from "@/app/lib/scheduleStore";
 
 // family_id used for scoping data to this family
-const FAMILY_ID = "family_1";
+const FAMILY_ID = "00000000-0000-0000-0000-000000000001";
 
 export default function SchedulePage() {
   const user = useSupabaseUser();
