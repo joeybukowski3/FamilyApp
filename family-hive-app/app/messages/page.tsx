@@ -17,11 +17,8 @@ export default function MessagesPage() {
   const [messages, setMessages] = useState<FamilyMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(true);
-  const [status, setStatus] = useState<"connecting" | "connected" | "error">("connecting");
-
-  const displayName = useMemo(() => {
-    return user?.user_metadata?.display_name as string | undefined;
-  }, [user?.user_metadata?.display_name]);
+  const [status, setStatus] = useState<string>("connecting...");
+  const [errDetail, setErrDetail] = useState<string | null>(null);
 
   const activeMemberId = useMemo(() => {
     if (!user?.id) return "family";
@@ -33,7 +30,7 @@ export default function MessagesPage() {
   useEffect(() => {
     const fetchMessages = async () => {
       setLoading(true);
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("messages")
         .select("*")
         .eq("family_id", FAMILY_ID)
@@ -41,10 +38,7 @@ export default function MessagesPage() {
 
       if (data) {
         setMessages(data.map((m: any) => ({
-          id: m.id,
-          authorId: m.author_id,
-          text: m.text,
-          timestamp: m.created_at,
+          id: m.id, authorId: m.author_id, text: m.text, timestamp: m.created_at,
         })));
       }
       setLoading(false);
@@ -52,19 +46,13 @@ export default function MessagesPage() {
 
     fetchMessages();
 
-    // REAL-TIME SUBSCRIPTION WITH DEBUGGING
+    // SIMPLIFIED REAL-TIME (Removed filter to test base connectivity)
     const channel = supabase
-      .channel("messages-realtime")
+      .channel("messages-live")
       .on(
         "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-          filter: `family_id=eq.${FAMILY_ID}`,
-        },
+        { event: "INSERT", schema: "public", table: "messages" },
         (payload) => {
-          console.log("New message received via Realtime:", payload);
           const newMessage: FamilyMessage = {
             id: payload.new.id,
             authorId: payload.new.author_id,
@@ -74,10 +62,12 @@ export default function MessagesPage() {
           setMessages((prev) => [newMessage, ...prev]);
         }
       )
-      .subscribe((status) => {
-        console.log("Realtime subscription status:", status);
-        if (status === "SUBSCRIBED") setStatus("connected");
-        if (status === "CHANNEL_ERROR") setStatus("error");
+      .subscribe((status, err) => {
+        setStatus(status);
+        if (err) {
+          console.error("Realtime error:", err);
+          setErrDetail(err.message);
+        }
       });
 
     return () => { supabase.removeChannel(channel); };
@@ -85,12 +75,12 @@ export default function MessagesPage() {
 
   const handlePost = async () => {
     if (!canEdit || !draft.trim()) return;
-    const { error } = await supabase.from("messages").insert({
+    await supabase.from("messages").insert({
       author_id: activeMemberId,
       text: draft.trim(),
       family_id: FAMILY_ID,
     });
-    if (!error) setDraft("");
+    setDraft("");
   };
 
   return (
@@ -100,15 +90,13 @@ export default function MessagesPage() {
           title="Messages"
           subtitle="Quick updates for the whole family."
           accent="sky"
-          icon={
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M5 5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H9l-4 3v-3H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
-            </svg>
-          }
           right={
-            <div className="flex items-center gap-2">
-              <span className={`h-2 w-2 rounded-full ${status === 'connected' ? 'bg-green-500' : status === 'error' ? 'bg-red-500' : 'bg-yellow-500 animate-pulse'}`} />
-              <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">{status}</span>
+            <div className="flex flex-col items-end">
+              <div className="flex items-center gap-2">
+                <span className={`h-2 w-2 rounded-full ${status === 'SUBSCRIBED' ? 'bg-green-500' : 'bg-red-500 animate-pulse'}`} />
+                <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">{status}</span>
+              </div>
+              {errDetail && <span className="text-[8px] text-red-400 max-w-[100px] truncate">{errDetail}</span>}
             </div>
           }
         />
@@ -123,7 +111,7 @@ export default function MessagesPage() {
                 className="min-h-[120px] w-full resize-none rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700"
               />
               <div className="flex justify-between items-center">
-                <span className="text-xs text-zinc-400">Posting as <b>{displayName || activeMemberId}</b></span>
+                <span className="text-xs text-zinc-400">Posting as <b>{activeMemberId}</b></span>
                 <button onClick={handlePost} className="btnAccent rounded-full px-5 py-2 text-xs font-semibold uppercase tracking-[0.2em]" disabled={!canEdit}>
                   Post
                 </button>
