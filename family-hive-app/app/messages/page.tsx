@@ -9,8 +9,9 @@ import useSupabaseUser from "@/app/lib/useSupabaseUser";
 import { supabase } from "@/app/lib/supabaseClient";
 import { familyMembers, FamilyMessage } from "@/app/lib/mockData";
 
-// Using a valid UUID format to match the Supabase column type
+// Hardcoded stable UUID
 const FAMILY_ID = "00000000-0000-0000-0000-000000000001";
+const APP_VERSION = "1.0.5"; // Incrementing to track deployment
 
 export default function MessagesPage() {
   const user = useSupabaseUser();
@@ -26,6 +27,8 @@ export default function MessagesPage() {
   }, [user?.id]);
   
   useEffect(() => {
+    setDebug(`v${APP_VERSION} | FID: ...${FAMILY_ID.slice(-5)}`);
+
     const fetchMessages = async () => {
       setLoading(true);
       const { data, error } = await supabase
@@ -34,8 +37,9 @@ export default function MessagesPage() {
         .eq("family_id", FAMILY_ID)
         .order("created_at", { ascending: false });
 
-      if (error) setDebug(prev => prev + ` | FetchErr: ${error.message}`);
-      if (data) {
+      if (error) {
+        setDebug(prev => `${prev} | FetchErr: ${error.message}`);
+      } else if (data) {
         setMessages(data.map((m: any) => ({
           id: m.id, authorId: m.author_id, text: m.text, timestamp: m.created_at,
         })));
@@ -45,24 +49,28 @@ export default function MessagesPage() {
 
     fetchMessages();
 
-    const channel = supabase.channel('messages-sync')
+    // ULTRA-SIMPLIFIED REALTIME (No filters, just listen)
+    const channel = supabase.channel('any-msg')
     .on('postgres_changes', { 
       event: 'INSERT', 
       schema: 'public', 
-      table: 'messages',
-      filter: `family_id=eq.${FAMILY_ID}`
+      table: 'messages'
     }, (payload) => {
-      const newMessage: FamilyMessage = {
-        id: payload.new.id,
-        authorId: payload.new.author_id,
-        text: payload.new.text,
-        timestamp: payload.new.created_at,
-      };
-      setMessages((prev) => [newMessage, ...prev]);
+      console.log("Realtime payload:", payload);
+      // Only add if it matches our family_id
+      if (payload.new.family_id === FAMILY_ID) {
+        const newMessage: FamilyMessage = {
+          id: payload.new.id,
+          authorId: payload.new.author_id,
+          text: payload.new.text,
+          timestamp: payload.new.created_at,
+        };
+        setMessages((prev) => [newMessage, ...prev]);
+      }
     })
     .subscribe((status, err) => {
       setStatus(status);
-      if (err) setDebug(prev => prev + ` | RTErr: ${err.message}`);
+      if (err) setDebug(prev => `${prev} | RTErr: ${err.message}`);
     });
 
     return () => { supabase.removeChannel(channel); };
@@ -75,7 +83,7 @@ export default function MessagesPage() {
       text: draft.trim(),
       family_id: FAMILY_ID,
     });
-    if (error) setDebug(prev => prev + ` | PostErr: ${error.message}`);
+    if (error) setDebug(prev => `${prev} | PostErr: ${error.message}`);
     setDraft("");
   };
 
@@ -87,12 +95,12 @@ export default function MessagesPage() {
           subtitle="Quick updates for the whole family."
           accent="sky"
           right={
-            <div className="flex flex-col items-end">
+            <div className="flex flex-col items-end text-right">
               <div className="flex items-center gap-2">
                 <span className={`h-2 w-2 rounded-full ${status === 'SUBSCRIBED' ? 'bg-green-500' : 'bg-red-500 animate-pulse'}`} />
                 <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">{status}</span>
               </div>
-              <span className="text-[8px] text-zinc-400 mt-1">{debug}</span>
+              <span className="text-[8px] text-zinc-400 mt-1 break-all max-w-[150px]">{debug}</span>
             </div>
           }
         />
