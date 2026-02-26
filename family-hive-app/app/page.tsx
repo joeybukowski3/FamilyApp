@@ -1,56 +1,65 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Card from "@/app/components/Card";
 import ShellFrame from "@/app/components/ShellFrame";
+import { supabase } from "@/app/lib/supabaseClient";
 
-const todos = [
-  { id: 1, task: "Plan weekend dinner", member: "A" },
-  { id: 2, task: "Buy art supplies", member: "J" },
-  { id: 3, task: "Confirm soccer time", member: "M" },
-];
-
-const messages = [
-  {
-    id: 1,
-    name: "Alex",
-    text: "Movie night is Friday. Add picks to the list!",
-    time: "2h ago",
-  },
-  {
-    id: 2,
-    name: "Morgan",
-    text: "Can someone grab extra milk?",
-    time: "5h ago",
-  },
-  {
-    id: 3,
-    name: "Jules",
-    text: "I will be late to dinner tonight.",
-    time: "Yesterday",
-  },
-];
-
-const events = [
-  { id: 1, title: "School concert", day: "Thu" },
-  { id: 2, title: "Family brunch", day: "Sat" },
-  { id: 3, title: "Dentist", day: "Tue" },
-];
+const FAMILY_ID = "family_1";
 
 export default function DashboardPage() {
+  const [todos, setTodos] = useState<any[]>([]);
+  const [messages, setMessages] = useState<any[]>([]);
+  const [events, setEvents] = useState<any[]>([]);
+  const [photos, setPhotos] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      setLoading(true);
+      
+      // Fetch latest 3 items for each section
+      const [todoRes, msgRes, eventRes, photoRes] = await Promise.all([
+        supabase.from("todos").select("*").eq("family_id", FAMILY_ID).order("created_at", { ascending: false }).limit(3),
+        supabase.from("messages").select("*").eq("family_id", FAMILY_ID).order("created_at", { ascending: false }).limit(3),
+        supabase.from("schedule").select("*").eq("family_id", FAMILY_ID).order("start_iso", { ascending: true }).limit(3),
+        supabase.from("photos").select("*").eq("family_id", FAMILY_ID).order("created_at", { ascending: false }).limit(6)
+      ]);
+
+      if (todoRes.data) setTodos(todoRes.data);
+      if (msgRes.data) setMessages(msgRes.data);
+      if (eventRes.data) setEvents(eventRes.data);
+      if (photoRes.data) setPhotos(photoRes.data);
+      
+      setLoading(false);
+    };
+
+    fetchDashboardData();
+
+    // Subscribe to changes to keep dashboard fresh
+    const channel = supabase.channel("dashboard-sync")
+      .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, () => fetchDashboardData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "photos" }, () => fetchDashboardData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "todos" }, () => fetchDashboardData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "schedule" }, () => fetchDashboardData())
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
   return (
     <ShellFrame>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.05fr_0.95fr] lg:gap-6">
         <div className="space-y-4 lg:space-y-6">
           <Card title="To-Do">
             <div className="space-y-3">
-              {todos.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex items-center justify-between gap-3 rounded-2xl bg-zinc-50 px-4 py-3"
-                >
-                  <div className="min-w-0 flex-1 truncate text-sm text-zinc-600">
-                    {item.task}
-                  </div>
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-xs font-semibold text-zinc-500 shadow">
-                    {item.member}
+              {loading ? <div className="animate-pulse h-20 bg-zinc-50 rounded-2xl" /> : todos.length === 0 ? (
+                <div className="text-xs text-zinc-400 py-4 text-center">No active tasks.</div>
+              ) : todos.map((item) => (
+                <div key={item.id} className="flex items-center justify-between gap-3 rounded-2xl bg-zinc-50 px-4 py-3">
+                  <div className="min-w-0 flex-1 truncate text-sm text-zinc-600">{item.task}</div>
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-xs font-semibold text-zinc-500 shadow uppercase">
+                    {item.author_id?.slice(0,1)}
                   </div>
                 </div>
               ))}
@@ -59,11 +68,10 @@ export default function DashboardPage() {
 
           <Card title="Shared Photo Roll">
             <div className="grid grid-cols-3 gap-2 sm:gap-3">
-              {Array.from({ length: 6 }).map((_, index) => (
-                <div
-                  key={`photo-${index}`}
-                  className="h-20 w-full rounded-2xl bg-zinc-100"
-                />
+              {loading ? [1,2,3].map(i => <div key={i} className="h-20 rounded-2xl bg-zinc-100 animate-pulse" />) : photos.map((p) => (
+                <div key={p.id} className="h-20 w-full rounded-2xl bg-zinc-100 overflow-hidden">
+                  <img src={p.image_url} className="w-full h-full object-cover" alt="" />
+                </div>
               ))}
             </div>
           </Card>
@@ -72,20 +80,15 @@ export default function DashboardPage() {
         <div className="space-y-4 lg:space-y-6">
           <Card title="Family Message Board">
             <div className="space-y-3">
-              {messages.map((message) => (
-                <div
-                  key={message.id}
-                  className="rounded-2xl bg-zinc-50 px-4 py-3"
-                >
+              {loading ? <div className="animate-pulse h-20 bg-zinc-50 rounded-2xl" /> : messages.length === 0 ? (
+                <div className="text-xs text-zinc-400 py-4 text-center">No messages yet.</div>
+              ) : messages.map((message) => (
+                <div key={message.id} className="rounded-2xl bg-zinc-50 px-4 py-3">
                   <div className="flex items-center justify-between gap-2 text-xs text-zinc-400">
-                    <span className="min-w-0 truncate font-semibold text-zinc-600">
-                      {message.name}
-                    </span>
-                    <span className="shrink-0">{message.time}</span>
+                    <span className="min-w-0 truncate font-semibold text-zinc-600 uppercase">{message.author_id}</span>
+                    <span className="shrink-0">{new Date(message.created_at).toLocaleDateString()}</span>
                   </div>
-                  <div className="mt-2 text-sm text-zinc-600">
-                    {message.text}
-                  </div>
+                  <div className="mt-2 text-sm text-zinc-600 line-clamp-2">{message.text}</div>
                 </div>
               ))}
             </div>
@@ -93,31 +96,14 @@ export default function DashboardPage() {
 
           <Card title="Family Schedule">
             <div className="grid grid-cols-7 gap-1 sm:gap-2 text-center text-[10px] text-zinc-400">
-              {"SMTWTFS".split("").map((day, i) => (
-                <div key={`${day}-${i}`}>{day}</div>
-              ))}
-            </div>
-            <div className="mt-2 grid grid-cols-7 gap-1 sm:gap-2">
-              {Array.from({ length: 28 }).map((_, index) => (
-                <div
-                  key={`day-${index}`}
-                  className={`flex h-8 w-full items-center justify-center rounded-lg text-xs ${
-                    index % 6 === 0 ? "bg-zinc-900 text-white" : "bg-zinc-100"
-                  }`}
-                >
-                  {index + 1}
-                </div>
-              ))}
+              {"SMTWTFS".split("").map((day, i) => <div key={i}>{day}</div>)}
             </div>
             <div className="mt-4 space-y-2">
-              {events.map((event) => (
-                <div
-                  key={event.id}
-                  className="flex items-center justify-between gap-3 rounded-2xl bg-zinc-50 px-4 py-2 text-sm text-zinc-600"
-                >
+              {loading ? <div className="animate-pulse h-10 bg-zinc-50 rounded-2xl" /> : events.map((event) => (
+                <div key={event.id} className="flex items-center justify-between gap-3 rounded-2xl bg-zinc-50 px-4 py-2 text-sm text-zinc-600">
                   <span className="min-w-0 truncate">{event.title}</span>
                   <span className="shrink-0 text-xs text-zinc-400">
-                    {event.day}
+                    {new Date(event.start_iso).toLocaleDateString(undefined, {weekday: 'short'})}
                   </span>
                 </div>
               ))}

@@ -7,29 +7,21 @@ import PageHeader from "@/app/components/PageHeader";
 import ShellFrame from "@/app/components/ShellFrame";
 import Avatar from "@/app/components/Avatar";
 import useSupabaseUser from "@/app/lib/useSupabaseUser";
+import { supabase } from "@/app/lib/supabaseClient";
 import { familyMembers } from "@/app/lib/mockData";
-import {
-  FamilyEvent,
-  getSeedSchedule,
-  hydrateSchedule,
-  saveSchedule,
-} from "@/app/lib/scheduleStore";
+import { FamilyEvent } from "@/app/lib/scheduleStore";
+
+// family_id used for scoping data to this family
+const FAMILY_ID = "family_1";
 
 export default function SchedulePage() {
   const user = useSupabaseUser();
-  const [events, setEvents] = useState<FamilyEvent[]>(getSeedSchedule);
+  const [events, setEvents] = useState<FamilyEvent[]>([]);
   const [title, setTitle] = useState("");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [notes, setNotes] = useState("");
-
-  useEffect(() => {
-    setEvents(hydrateSchedule());
-  }, []);
-
-  const memberLookup = useMemo(() => {
-    return new Map(familyMembers.map((member) => [member.id, member]));
-  }, []);
+  const [loading, setLoading] = useState(true);
 
   const displayName = useMemo(() => {
     return user?.user_metadata?.display_name as string | undefined;
@@ -37,7 +29,6 @@ export default function SchedulePage() {
 
   const activeMemberId = useMemo(() => {
     if (!user?.id) return "family";
-    // Using the user id from our authStore which is the lowercase username
     return familyMembers.find(
       (m) => m.id.toLowerCase() === user.id.toLowerCase()
     )?.id ?? "family";
@@ -45,11 +36,89 @@ export default function SchedulePage() {
 
   const canEdit = Boolean(user);
 
+  // 1. SELECT: Load schedule from Supabase on initial render
+  useEffect(() => {
+    const fetchSchedule = async () => {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("schedule")
+        .select("*")
+        .eq("family_id", FAMILY_ID)
+        .order("start_iso", { ascending: true });
+
+      if (error) {
+        console.error("Error fetching schedule:", error);
+      } else if (data) {
+        const mapped: FamilyEvent[] = data.map((e: any) => ({
+          id: e.id,
+          title: e.title,
+          startISO: e.start_iso,
+          notes: e.notes,
+          createdByMemberId: e.author_id,
+          createdAt: e.created_at,
+        }));
+        setEvents(mapped);
+      }
+      setLoading(false);
+    };
+
+    fetchSchedule();
+
+    // 2. Realtime: Subscribe to all changes on the schedule table
+    const channel = supabase
+      .channel("schedule-realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "*", // Listen for INSERT, UPDATE, and DELETE
+          schema: "public",
+          table: "schedule",
+          filter: `family_id=eq.${FAMILY_ID}`,
+        },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            const newEvent: FamilyEvent = {
+              id: payload.new.id,
+              title: payload.new.title,
+              startISO: payload.new.start_iso,
+              notes: payload.new.notes,
+              createdByMemberId: payload.new.author_id,
+              createdAt: payload.new.created_at,
+            };
+            setEvents((prev) => [...prev, newEvent].sort((a, b) => a.startISO.localeCompare(b.startISO)));
+          } else if (payload.eventType === "DELETE") {
+            setEvents((prev) => prev.filter((e) => e.id !== payload.old.id));
+          } else if (payload.eventType === "UPDATE") {
+            setEvents((prev) => 
+              prev.map((e) => e.id === payload.new.id ? {
+                id: payload.new.id,
+                title: payload.new.title,
+                startISO: payload.new.start_iso,
+                notes: payload.new.notes,
+                createdByMemberId: payload.new.author_id,
+                createdAt: payload.new.created_at,
+              } : e).sort((a, b) => a.startISO.localeCompare(b.startISO))
+            );
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const memberLookup = useMemo(() => {
+    return new Map(familyMembers.map((member) => [member.id, member]));
+  }, []);
+
   const sortedEvents = useMemo(() => {
     return [...events].sort((a, b) => a.startISO.localeCompare(b.startISO));
   }, [events]);
 
-  const handleAddEvent = () => {
+  // 3. INSERT: Add a new event to Supabase
+  const handleAddEvent = async () => {
     if (!canEdit || !activeMemberId) return;
     const trimmedTitle = title.trim();
     if (!trimmedTitle || !date || !time) return;
@@ -57,34 +126,37 @@ export default function SchedulePage() {
     const startDate = new Date(`${date}T${time}`);
     if (Number.isNaN(startDate.getTime())) return;
 
-    const nextEvent: FamilyEvent = {
-      id: `event-${Date.now()}`,
+    const { error } = await supabase.from("schedule").insert({
       title: trimmedTitle,
-      startISO: startDate.toISOString(),
-      notes: notes.trim() ? notes.trim() : undefined,
-      createdByMemberId: activeMemberId,
-      createdAt: new Date().toISOString(),
-    };
-
-    setEvents((prev) => {
-      const updated = [nextEvent, ...prev];
-      saveSchedule(updated);
-      return updated;
+      start_iso: startDate.toISOString(),
+      notes: notes.trim() ? notes.trim() : null,
+      author_id: activeMemberId,
+      family_id: FAMILY_ID,
     });
 
-    setTitle("");
-    setDate("");
-    setTime("");
-    setNotes("");
+    if (error) {
+      console.error("Error adding event:", error);
+      alert("Failed to add event.");
+    } else {
+      setTitle("");
+      setDate("");
+      setTime("");
+      setNotes("");
+    }
   };
 
-  const handleDeleteEvent = (eventId: string) => {
+  // 4. DELETE: Remove an event from Supabase
+  const handleDeleteEvent = async (eventId: string) => {
     if (!canEdit) return;
-    setEvents((prev) => {
-      const updated = prev.filter((event) => event.id !== eventId);
-      saveSchedule(updated);
-      return updated;
-    });
+    const { error } = await supabase
+      .from("schedule")
+      .delete()
+      .eq("id", eventId);
+
+    if (error) {
+      console.error("Error deleting event:", error);
+      alert("Failed to delete event.");
+    }
   };
 
   return (
@@ -168,7 +240,7 @@ export default function SchedulePage() {
             </div>
           ) : (
             <div className="rounded-2xl bg-zinc-50 px-4 py-4 text-xs text-zinc-500">
-              Unlock to add or delete events.{" "}
+              Please sign in to add or delete events.{" "}
               <Link href="/login" className="font-semibold text-zinc-700">
                 Go to sign in
               </Link>
@@ -181,13 +253,15 @@ export default function SchedulePage() {
             <div className="mb-3 rounded-2xl bg-zinc-50 px-4 py-3 text-xs text-zinc-500">
               Viewing schedule in read-only mode.{" "}
               <Link href="/login" className="font-semibold text-zinc-700">
-                Unlock editing
+                Sign in to edit
               </Link>
             </div>
           ) : null}
           <div className="space-y-3">
-            {sortedEvents.length === 0 ? (
-              <div className="rounded-2xl bg-zinc-50 px-4 py-6 text-sm text-zinc-500">
+            {loading ? (
+              <div className="py-10 text-center text-sm text-zinc-400">Loading schedule...</div>
+            ) : sortedEvents.length === 0 ? (
+              <div className="rounded-2xl bg-zinc-50 px-4 py-6 text-sm text-zinc-500 text-center">
                 No upcoming events yet.
               </div>
             ) : (

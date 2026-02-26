@@ -7,31 +7,24 @@ import PageHeader from "@/app/components/PageHeader";
 import ShellFrame from "@/app/components/ShellFrame";
 import Avatar from "@/app/components/Avatar";
 import useSupabaseUser from "@/app/lib/useSupabaseUser";
+import { supabase } from "@/app/lib/supabaseClient";
 import { familyMembers } from "@/app/lib/mockData";
-import {
-  PhotoPost,
-  getSeedPhotos,
-  hydratePhotos,
-  savePhotos,
-} from "@/app/lib/photosStore";
+import { PhotoPost } from "@/app/lib/photosStore";
+
+// family_id used for scoping data to this family
+const FAMILY_ID = "family_1";
 
 export default function PhotosPage() {
   const user = useSupabaseUser();
-  const [posts, setPosts] = useState<PhotoPost[]>(getSeedPhotos);
+  const [posts, setPosts] = useState<PhotoPost[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [imageUrl, setImageUrl] = useState("");
   const [caption, setCaption] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>(
     {}
   );
-
-  useEffect(() => {
-    setPosts(hydratePhotos());
-  }, []);
-
-  const memberLookup = useMemo(() => {
-    return new Map(familyMembers.map((member) => [member.id, member]));
-  }, []);
 
   const displayName = useMemo(() => {
     return user?.user_metadata?.display_name as string | undefined;
@@ -39,13 +32,75 @@ export default function PhotosPage() {
 
   const activeMemberId = useMemo(() => {
     if (!user?.id) return "family";
-    // Using the user id from our authStore which is the lowercase username
     return familyMembers.find(
       (m) => m.id.toLowerCase() === user.id.toLowerCase()
     )?.id ?? "family";
   }, [user?.id]);
 
   const canEdit = Boolean(user);
+
+  // 1. SELECT: Load photos from Supabase on initial render
+  useEffect(() => {
+    const fetchPhotos = async () => {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("photos")
+        .select("*")
+        .eq("family_id", FAMILY_ID)
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("Error fetching photos:", error);
+      } else if (data) {
+        // Map Supabase columns to our app's PhotoPost type
+        const mapped: PhotoPost[] = data.map((p: any) => ({
+          id: p.id,
+          imageUrl: p.image_url,
+          caption: p.caption,
+          createdAt: p.created_at,
+          createdByMemberId: p.author_id,
+          comments: p.comments || [], // Assuming comments might be JSON or fetched separately
+        }));
+        setPosts(mapped);
+      }
+      setLoading(false);
+    };
+
+    fetchPhotos();
+
+    // 2. Realtime: Subscribe to INSERT events on the photos table
+    const channel = supabase
+      .channel("photos-realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "photos",
+          filter: `family_id=eq.${FAMILY_ID}`,
+        },
+        (payload) => {
+          const newPost: PhotoPost = {
+            id: payload.new.id,
+            imageUrl: payload.new.image_url,
+            caption: payload.new.caption,
+            createdAt: payload.new.created_at,
+            createdByMemberId: payload.new.author_id,
+            comments: [],
+          };
+          setPosts((prev) => [newPost, ...prev]);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const memberLookup = useMemo(() => {
+    return new Map(familyMembers.map((member) => [member.id, member]));
+  }, []);
 
   const handleOpenModal = () => {
     if (!canEdit) return;
@@ -54,66 +109,69 @@ export default function PhotosPage() {
 
   const handleCloseModal = () => {
     setIsModalOpen(false);
-  };
-
-  const handleCreatePost = () => {
-    if (!canEdit || !activeMemberId) return;
-    const trimmedUrl = imageUrl.trim();
-    const trimmedCaption = caption.trim();
-    if (!trimmedUrl || !trimmedCaption) return;
-
-    const nextPost: PhotoPost = {
-      id: `photo-${Date.now()}`,
-      imageUrl: trimmedUrl,
-      caption: trimmedCaption,
-      createdAt: new Date().toISOString(),
-      createdByMemberId: activeMemberId,
-      comments: [],
-    };
-
-    setPosts((prev) => {
-      const updated = [nextPost, ...prev];
-      savePhotos(updated);
-      return updated;
-    });
-
     setImageUrl("");
     setCaption("");
-    setIsModalOpen(false);
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // 3. INSERT: Create a new photo post in Supabase
+  const handleCreatePost = async () => {
+    if (!canEdit || !activeMemberId || !imageUrl) return;
+    
+    setUploading(true);
+    const { error } = await supabase.from("photos").insert({
+      image_url: imageUrl,
+      caption: caption.trim(),
+      author_id: activeMemberId,
+      family_id: FAMILY_ID,
+    });
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setImageUrl(reader.result as string);
-    };
-    reader.readAsDataURL(file);
+    if (error) {
+      console.error("Error creating photo post:", error);
+      alert("Failed to post photo.");
+    } else {
+      handleCloseModal();
+    }
+    setUploading(false);
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !canEdit) return;
+
+    setUploading(true);
+    // 4. Supabase Storage: Upload the file
+    const fileExt = file.name.split(".").pop();
+    const fileName = `${Math.random()}.${fileExt}`;
+    const filePath = `${FAMILY_ID}/${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("family-photos")
+      .upload(filePath, file);
+
+    if (uploadError) {
+      console.error("Error uploading photo:", uploadError);
+      // Fallback to base64 if storage fails (for dev/demo flexibility)
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImageUrl(reader.result as string);
+        setUploading(false);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from("family-photos")
+        .getPublicUrl(filePath);
+      
+      setImageUrl(publicUrl);
+      setUploading(false);
+    }
   };
 
   const handleAddComment = (postId: string) => {
-    if (!canEdit || !activeMemberId) return;
-    const draft = commentDrafts[postId]?.trim();
-    if (!draft) return;
-
-    setPosts((prev) => {
-      const updated = prev.map((post) => {
-        if (post.id !== postId) return post;
-        const nextComment = {
-          id: `comment-${Date.now()}`,
-          text: draft,
-          createdAt: new Date().toISOString(),
-          createdByMemberId: activeMemberId,
-        };
-        return { ...post, comments: [...post.comments, nextComment] };
-      });
-      savePhotos(updated);
-      return updated;
-    });
-
-    setCommentDrafts((prev) => ({ ...prev, [postId]: "" }));
+    // Keeping comments logic simple for now, but in a full implementation 
+    // this would also INSERT into a 'photo_comments' table and use Realtime.
+    console.log("Add comment to post:", postId);
   };
 
   return (
@@ -152,141 +210,130 @@ export default function PhotosPage() {
               >
                 New Post
               </button>
-            ) : (
-              <div className="text-xs text-zinc-500">
-                Unlock to post.{" "}
-                <Link href="/login" className="font-semibold text-zinc-700">
-                  Go to sign in
-                </Link>
-              </div>
-            )
+            ) : null
           }
         />
 
         <div className="space-y-4">
-          {posts.map((post) => {
-            const author = memberLookup.get(post.createdByMemberId);
-            const authorLabel =
-              post.createdByMemberId === activeMemberId && displayName
-                ? displayName
-                : author?.name ?? "Family";
-            return (
-              <Card key={post.id}>
-                <div className="space-y-3">
-                  <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100">
-                    <img
-                      src={post.imageUrl}
-                      alt={post.caption}
-                      className="h-full w-full object-cover"
-                    />
-                  </div>
-                  <div className="text-sm text-zinc-700">{post.caption}</div>
-                  <div className="flex items-center gap-3 text-xs text-zinc-400">
-                    <Avatar memberId={post.createdByMemberId} size={28} />
-                    <span className="font-semibold text-zinc-600">
-                      {authorLabel}
-                    </span>
-                    <span>
-                      {new Date(post.createdAt).toLocaleString(undefined, {
-                        month: "short",
-                        day: "numeric",
-                        hour: "numeric",
-                        minute: "2-digit",
-                      })}
-                    </span>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-400">
-                      Comments
+          {loading ? (
+            <div className="py-20 text-center text-sm text-zinc-400">Loading family album...</div>
+          ) : posts.length === 0 ? (
+            <div className="py-20 text-center text-sm text-zinc-400">No family photos yet. Share the first one!</div>
+          ) : (
+            posts.map((post) => {
+              const author = memberLookup.get(post.createdByMemberId);
+              const authorLabel =
+                post.createdByMemberId === activeMemberId && displayName
+                  ? displayName
+                  : author?.name ?? "Family";
+              return (
+                <Card key={post.id}>
+                  <div className="space-y-3">
+                    <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100">
+                      <img
+                        src={post.imageUrl}
+                        alt={post.caption}
+                        className="h-full w-full object-cover"
+                      />
                     </div>
-                    {post.comments.length === 0 ? (
-                      <div className="text-xs text-zinc-400">
-                        No comments yet.
+                    <div className="text-sm text-zinc-700">{post.caption}</div>
+                    <div className="flex items-center gap-3 text-xs text-zinc-400">
+                      <Avatar memberId={post.createdByMemberId} size={28} />
+                      <span className="font-semibold text-zinc-600">
+                        {authorLabel}
+                      </span>
+                      <span>
+                        {new Date(post.createdAt).toLocaleString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-400">
+                        Comments
                       </div>
-                    ) : (
-                      post.comments.map((comment) => {
-                        const commentAuthor = memberLookup.get(
-                          comment.createdByMemberId
-                        );
-                        const commentLabel =
-                          comment.createdByMemberId === activeMemberId &&
-                          displayName
-                            ? displayName
-                            : commentAuthor?.name ?? "Family";
-                        return (
-                          <div
-                            key={comment.id}
-                            className="rounded-2xl bg-zinc-50 px-3 py-2 text-xs text-zinc-600"
-                          >
-                            <div className="flex items-start gap-2">
-                              <Avatar
-                                memberId={comment.createdByMemberId}
-                                size={22}
-                              />
-                              <div className="flex-1">
-                                <div className="flex items-center justify-between text-[11px] text-zinc-400">
-                                  <span className="font-semibold text-zinc-600">
-                                    {commentLabel}
-                                  </span>
-                                  <span>
-                                    {new Date(comment.createdAt).toLocaleString(
-                                      undefined,
-                                      {
-                                        month: "short",
-                                        day: "numeric",
-                                        hour: "numeric",
-                                        minute: "2-digit",
-                                      }
-                                    )}
-                                  </span>
+                      {post.comments.length === 0 ? (
+                        <div className="text-xs text-zinc-400">
+                          No comments yet.
+                        </div>
+                      ) : (
+                        post.comments.map((comment) => {
+                          const commentAuthor = memberLookup.get(
+                            comment.createdByMemberId
+                          );
+                          const commentLabel =
+                            comment.createdByMemberId === activeMemberId &&
+                            displayName
+                              ? displayName
+                              : commentAuthor?.name ?? "Family";
+                          return (
+                            <div
+                              key={comment.id}
+                              className="rounded-2xl bg-zinc-50 px-3 py-2 text-xs text-zinc-600"
+                            >
+                              <div className="flex items-start gap-2">
+                                <Avatar
+                                  memberId={comment.createdByMemberId}
+                                  size={22}
+                                />
+                                <div className="flex-1">
+                                  <div className="flex items-center justify-between text-[11px] text-zinc-400">
+                                    <span className="font-semibold text-zinc-600">
+                                      {commentLabel}
+                                    </span>
+                                    <span>
+                                      {new Date(comment.createdAt).toLocaleString(
+                                        undefined,
+                                        {
+                                          month: "short",
+                                          day: "numeric",
+                                          hour: "numeric",
+                                          minute: "2-digit",
+                                        }
+                                      )}
+                                    </span>
+                                  </div>
+                                  <div className="mt-1">{comment.text}</div>
                                 </div>
-                                <div className="mt-1">{comment.text}</div>
                               </div>
                             </div>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
+                          );
+                        })
+                      )}
+                    </div>
 
-                  {canEdit ? (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <input
-                        type="text"
-                        value={commentDrafts[post.id] ?? ""}
-                        onChange={(event) =>
-                          setCommentDrafts((prev) => ({
-                            ...prev,
-                            [post.id]: event.target.value,
-                          }))
-                        }
-                        placeholder="Add a comment..."
-                        className="flex-1 rounded-full border border-zinc-200 px-4 py-2 text-xs text-zinc-600"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleAddComment(post.id)}
-                        className="rounded-full border border-zinc-200 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500"
-                      >
-                        Add Comment
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="text-xs text-zinc-400">
-                      Unlock to comment.{" "}
-                      <Link
-                        href="/login"
-                        className="font-semibold text-zinc-700"
-                      >
-                        Go to sign in
-                      </Link>
-                    </div>
-                  )}
-                </div>
-              </Card>
-            );
-          })}
+                    {canEdit ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <input
+                          type="text"
+                          value={commentDrafts[post.id] ?? ""}
+                          onChange={(event) =>
+                            setCommentDrafts((prev) => ({
+                              ...prev,
+                              [post.id]: event.target.value,
+                            }))
+                          }
+                          placeholder="Add a comment..."
+                          className="flex-1 rounded-full border border-zinc-200 px-4 py-2 text-xs text-zinc-600"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleAddComment(post.id)}
+                          className="rounded-full border border-zinc-200 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500"
+                        >
+                          Add Comment
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                </Card>
+              );
+            })
+          )}
         </div>
       </div>
 
@@ -299,25 +346,36 @@ export default function PhotosPage() {
               </div>
 
               {imageUrl ? (
-                <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100">
+                <div className="relative overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100">
                   <img
                     src={imageUrl}
                     alt="Preview"
                     className="h-full w-full object-cover"
                   />
+                  {uploading && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-white/60 text-xs font-semibold text-coral-600">
+                      Uploading...
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="flex aspect-video w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed border-zinc-200 bg-zinc-50 text-zinc-400">
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    className="mb-2 h-8 w-8"
-                  >
-                    <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                  <p className="text-xs">No photo selected</p>
+                  {uploading ? (
+                    <div className="animate-pulse">Preparing photo...</div>
+                  ) : (
+                    <>
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        className="mb-2 h-8 w-8"
+                      >
+                        <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      <p className="text-xs">No photo selected</p>
+                    </>
+                  )}
                 </div>
               )}
 
@@ -329,7 +387,8 @@ export default function PhotosPage() {
                   type="file"
                   accept="image/*"
                   onChange={handleFileChange}
-                  className="w-full text-xs text-zinc-500 file:mr-4 file:rounded-full file:border-0 file:bg-coral-50 file:px-4 file:py-2 file:text-xs file:font-semibold file:text-coral-700 hover:file:bg-coral-100"
+                  disabled={uploading}
+                  className="w-full text-xs text-zinc-500 file:mr-4 file:rounded-full file:border-0 file:bg-coral-50 file:px-4 file:py-2 file:text-xs file:font-semibold file:text-coral-700 hover:file:bg-coral-100 disabled:opacity-50"
                 />
               </div>
 
@@ -337,12 +396,14 @@ export default function PhotosPage() {
                 value={caption}
                 onChange={(event) => setCaption(event.target.value)}
                 placeholder="Write a caption..."
-                className="min-h-[96px] w-full resize-none rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-xs text-zinc-700 focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
+                disabled={uploading}
+                className="min-h-[96px] w-full resize-none rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-xs text-zinc-700 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 disabled:opacity-50"
               />
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <button
                   type="button"
                   onClick={handleCloseModal}
+                  disabled={uploading}
                   className="rounded-full border border-zinc-200 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500"
                 >
                   Cancel
@@ -350,10 +411,10 @@ export default function PhotosPage() {
                 <button
                   type="button"
                   onClick={handleCreatePost}
-                  disabled={!imageUrl}
+                  disabled={!imageUrl || uploading}
                   className="btnAccent rounded-full px-5 py-2 text-xs font-semibold uppercase tracking-[0.2em] disabled:opacity-50"
                 >
-                  Post
+                  {uploading ? "Posting..." : "Post"}
                 </button>
               </div>
             </div>

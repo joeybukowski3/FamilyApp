@@ -5,13 +5,51 @@ import { useEffect, useState } from "react";
 import Card from "@/app/components/Card";
 import PageHeader from "@/app/components/PageHeader";
 import ShellFrame from "@/app/components/ShellFrame";
-import { getSeedLists, hydrateLists, ListsState } from "@/app/lib/listsStore";
+import { supabase } from "@/app/lib/supabaseClient";
+
+const FAMILY_ID = "family_1";
 
 export default function ListsPage() {
-  const [lists, setLists] = useState<ListsState>(getSeedLists);
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  const [previews, setPreviews] = useState<Record<string, any[]>>({});
+  const [loading, setLoading] = useState(true);
+
+  const listGroups = [
+    { id: "todo", title: "To-Do List" },
+    { id: "wishlist", title: "Wish List" },
+    { id: "christmas", title: "Christmas List" },
+    { id: "custom", title: "Custom" },
+  ];
 
   useEffect(() => {
-    setLists(hydrateLists());
+    const fetchListsOverview = async () => {
+      setLoading(true);
+      // Fetch items for all lists to get counts and previews
+      const { data, error } = await supabase
+        .from("todos")
+        .select("*")
+        .eq("family_id", FAMILY_ID);
+
+      if (data) {
+        const newCounts: Record<string, number> = {};
+        const newPreviews: Record<string, any[]> = {};
+
+        data.forEach(item => {
+          const listId = item.list_id || "todo";
+          newCounts[listId] = (newCounts[listId] || 0) + 1;
+          if (!newPreviews[listId]) newPreviews[listId] = [];
+          if (newPreviews[listId].length < 3 && !item.is_completed) {
+            newPreviews[listId].push(item);
+          }
+        });
+
+        setCounts(newCounts);
+        setPreviews(newPreviews);
+      }
+      setLoading(false);
+    };
+
+    fetchListsOverview();
   }, []);
 
   return (
@@ -35,8 +73,9 @@ export default function ListsPage() {
         />
 
         <div className="grid gap-4 lg:grid-cols-2">
-          {lists.groups.map((group) => {
-            const items = lists.items.filter((item) => item.listId === group.id);
+          {listGroups.map((group) => {
+            const listItems = previews[group.id] || [];
+            const itemCount = counts[group.id] || 0;
             return (
               <Card key={group.id} title={group.title}>
                 <Link
@@ -44,21 +83,23 @@ export default function ListsPage() {
                   className="block rounded-2xl bg-zinc-50 px-4 py-3 text-sm text-zinc-600 transition hover:bg-zinc-100"
                 >
                   <div className="space-y-2">
-                    {items.length === 0 ? (
+                    {loading ? (
+                      <div className="animate-pulse h-4 bg-zinc-200 rounded w-3/4" />
+                    ) : listItems.length === 0 ? (
                       <div className="text-xs text-zinc-400">
-                        No items yet. Add the first one.
+                        No active items.
                       </div>
                     ) : (
-                      items.slice(0, 3).map((item) => (
+                      listItems.map((item) => (
                         <div key={item.id} className="flex items-center gap-2">
                           <span className="h-2 w-2 rounded-full bg-zinc-300" />
-                          <span>{item.text}</span>
+                          <span className="truncate">{item.task}</span>
                         </div>
                       ))
                     )}
                   </div>
                   <div className="mt-3 text-xs text-zinc-400">
-                    {items.length} item{items.length === 1 ? "" : "s"}
+                    {itemCount} item{itemCount === 1 ? "" : "s"}
                   </div>
                 </Link>
               </Card>

@@ -7,219 +7,152 @@ import Card from "@/app/components/Card";
 import ShellFrame from "@/app/components/ShellFrame";
 import Avatar from "@/app/components/Avatar";
 import useSupabaseUser from "@/app/lib/useSupabaseUser";
+import { supabase } from "@/app/lib/supabaseClient";
 import { familyMembers } from "@/app/lib/mockData";
-import {
-  getSeedLists,
-  hydrateLists,
-  ListsState,
-  saveLists,
-} from "@/app/lib/listsStore";
+
+const FAMILY_ID = "family_1";
 
 export default function ListDetailPage() {
   const user = useSupabaseUser();
-  const router = useRouter();
-  const [lists, setLists] = useState<ListsState>(getSeedLists);
+  const [items, setItems] = useState<any[]>([]);
+  const [listTitle, setListTitle] = useState("");
   const [draft, setDraft] = useState("");
   const [hideCompleted, setHideCompleted] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const routeParams = useParams();
-  const listIdRaw = routeParams?.listId;
-  const listId = Array.isArray(listIdRaw)
-    ? listIdRaw[0]
-    : (listIdRaw as string | undefined);
+  const listId = routeParams?.listId as string;
 
   useEffect(() => {
-    setLists(hydrateLists());
-  }, []);
+    if (!listId) return;
 
-  const memberLookup = useMemo(() => {
-    return new Map(familyMembers.map((member) => [member.id, member]));
-  }, []);
+    const fetchListItems = async () => {
+      setLoading(true);
+      // Fetch list details and items from Supabase
+      const { data, error } = await supabase
+        .from("todos")
+        .select("*")
+        .eq("list_id", listId)
+        .eq("family_id", FAMILY_ID)
+        .order("created_at", { ascending: false });
 
-  const displayName = useMemo(() => {
-    return user?.user_metadata?.display_name as string | undefined;
-  }, [user?.user_metadata?.display_name]);
+      if (data) {
+        setItems(data);
+        // Using common list names as a fallback for title
+        const titles: Record<string, string> = {
+          todo: "To-Do List",
+          wishlist: "Wish List",
+          christmas: "Christmas List",
+          custom: "Custom List"
+        };
+        setListTitle(titles[listId] || "Family List");
+      }
+      setLoading(false);
+    };
+
+    fetchListItems();
+
+    // REAL-TIME: Listen for all changes to items in this specific list
+    const channel = supabase.channel(`list-${listId}`)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "todos",
+        filter: `list_id=eq.${listId}`
+      }, (payload) => {
+        if (payload.eventType === "INSERT") {
+          setItems(prev => [payload.new, ...prev]);
+        } else if (payload.eventType === "UPDATE") {
+          setItems(prev => prev.map(i => i.id === payload.new.id ? payload.new : i));
+        } else if (payload.eventType === "DELETE") {
+          setItems(prev => prev.filter(i => i.id !== payload.old.id));
+        }
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [listId]);
 
   const activeMemberId = useMemo(() => {
     if (!user?.id) return "family";
-    // Using the user id from our authStore which is the lowercase username
-    return familyMembers.find(
-      (m) => m.id.toLowerCase() === user.id.toLowerCase()
-    )?.id ?? "family";
+    return familyMembers.find(m => m.id.toLowerCase() === user.id.toLowerCase())?.id ?? "family";
   }, [user?.id]);
 
-  const canEdit = Boolean(user);
-
-  // Guard: route param missing
-  if (!listId || typeof listId !== "string") {
-    return (
-      <ShellFrame>
-        <Card title="List">
-          <div className="text-sm text-zinc-500">
-            Missing list id.{" "}
-            <Link href="/lists" className="font-semibold text-zinc-700">
-              Back to lists
-            </Link>
-          </div>
-        </Card>
-      </ShellFrame>
-    );
-  }
-
-  const group = lists.groups.find((entry) => entry.id === listId);
-
-  if (!group) {
-    return (
-      <ShellFrame>
-        <Card title="List not found">
-          <div className="text-sm text-zinc-500">
-            This list does not exist.{" "}
-            <Link href="/lists" className="font-semibold text-zinc-700">
-              Back to lists
-            </Link>
-          </div>
-        </Card>
-      </ShellFrame>
-    );
-  }
-
-  const listItems = lists.items.filter((item) => item.listId === group.id);
-  const incompleteItems = listItems.filter((item) => !item.completedAt);
-  const completedItems = listItems.filter((item) => item.completedAt);
-  const visibleItems = hideCompleted
-    ? incompleteItems
-    : [...incompleteItems, ...completedItems];
-
-  const handleAddItem = () => {
-    if (!canEdit || !activeMemberId) return;
-    const trimmed = draft.trim();
-    if (!trimmed) return;
-
-    const nextItem = {
-      id: `item-${Date.now()}`,
-      listId: group.id,
-      text: trimmed,
-      createdAt: new Date().toISOString(),
-      createdByMemberId: activeMemberId,
-      completedAt: undefined as string | undefined,
-    };
-
-    setLists((prev) => {
-      const updated = { ...prev, items: [nextItem, ...prev.items] };
-      saveLists(updated);
-      return updated;
+  const handleAddItem = async () => {
+    if (!user || !draft.trim()) return;
+    
+    const { error } = await supabase.from("todos").insert({
+      task: draft.trim(),
+      author_id: activeMemberId,
+      family_id: FAMILY_ID,
+      list_id: listId,
+      is_completed: false
     });
 
-    setDraft("");
+    if (!error) setDraft("");
   };
 
-  const handleToggleComplete = (itemId: string) => {
-    if (!canEdit) return;
-
-    setLists((prev) => {
-      const updatedItems = prev.items.map((item) => {
-        if (item.id !== itemId) return item;
-        return {
-          ...item,
-          completedAt: item.completedAt ? undefined : new Date().toISOString(),
-        };
-      });
-      const updated = { ...prev, items: updatedItems };
-      saveLists(updated);
-      return updated;
-    });
+  const handleToggleComplete = async (itemId: string, currentStatus: boolean) => {
+    if (!user) return;
+    await supabase
+      .from("todos")
+      .update({ is_completed: !currentStatus, completed_at: !currentStatus ? new Date().toISOString() : null })
+      .eq("id", itemId);
   };
+
+  const visibleItems = hideCompleted ? items.filter(i => !i.is_completed) : items;
 
   return (
     <ShellFrame>
       <div className="accent-mint">
-        <Card>
+        <Card title={listTitle}>
           <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <div className="text-sm font-semibold text-zinc-700">
-                {group.title}
-              </div>
-              <p className="text-xs text-zinc-400">
-                {listItems.length} item{listItems.length === 1 ? "" : "s"}
-              </p>
-            </div>
-
             <div className="flex flex-1 flex-wrap items-center gap-2 sm:justify-end">
               <input
                 type="text"
                 placeholder="Add item..."
                 className="w-full rounded-full border border-zinc-200 px-4 py-2 text-xs text-zinc-600 sm:w-56"
                 value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                disabled={!canEdit}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleAddItem();
-                }}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAddItem()}
               />
               <button
                 type="button"
                 onClick={handleAddItem}
                 className="btnAccent rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em]"
-                disabled={!canEdit}
               >
-                Add Item
+                Add
               </button>
             </div>
           </div>
 
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-500">
-            <span>
-              {listItems.length} item{listItems.length === 1 ? "" : "s"}
-            </span>
+            <span>{items.length} item{items.length === 1 ? "" : "s"}</span>
             <button
-              type="button"
-              onClick={() => setHideCompleted((prev) => !prev)}
-              className="rounded-full border border-zinc-200 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500"
+              onClick={() => setHideCompleted(!hideCompleted)}
+              className="rounded-full border border-zinc-200 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.2em]"
             >
               {hideCompleted ? "Show completed" : "Hide completed"}
             </button>
           </div>
 
           <div className="mt-4 space-y-3">
-            {visibleItems.map((item) => {
-              const creator = memberLookup.get(item.createdByMemberId);
-              const creatorLabel =
-                item.createdByMemberId === activeMemberId && displayName
-                  ? displayName
-                  : creator?.name ?? "Family";
-              return (
-                <label
-                  key={item.id}
-                  className="flex items-start gap-3 rounded-2xl bg-zinc-50 px-4 py-3 text-sm text-zinc-600"
-                >
-                  <input
-                    type="checkbox"
-                    checked={Boolean(item.completedAt)}
-                    onChange={() => handleToggleComplete(item.id)}
-                    disabled={!canEdit}
-                  />
-                  <Avatar memberId={item.createdByMemberId} size={28} />
-                  <div className="flex-1">
-                    <div
-                      className={`font-medium ${
-                        item.completedAt ? "line-through text-zinc-400" : ""
-                      }`}
-                    >
-                      {item.text}
-                    </div>
-                    <div className="mt-1 text-xs text-zinc-400">
-                      {creatorLabel} •{" "}
-                      {new Date(item.createdAt).toLocaleString(undefined, {
-                        month: "short",
-                        day: "numeric",
-                        hour: "numeric",
-                        minute: "2-digit",
-                      })}
-                    </div>
+            {loading ? <div className="py-10 text-center text-xs animate-pulse">Loading list...</div> : visibleItems.map((item) => (
+              <label key={item.id} className="flex items-start gap-3 rounded-2xl bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
+                <input
+                  type="checkbox"
+                  checked={item.is_completed}
+                  onChange={() => handleToggleComplete(item.id, item.is_completed)}
+                />
+                <Avatar memberId={item.author_id} size={28} />
+                <div className="flex-1">
+                  <div className={`font-medium ${item.is_completed ? "line-through text-zinc-400" : ""}`}>{item.task}</div>
+                  <div className="mt-1 text-xs text-zinc-400">
+                    {item.author_id} • {new Date(item.created_at).toLocaleDateString()}
                   </div>
-                </label>
-              );
-            })}
+                </div>
+              </label>
+            ))}
           </div>
         </Card>
       </div>

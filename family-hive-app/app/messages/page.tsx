@@ -7,72 +7,90 @@ import PageHeader from "@/app/components/PageHeader";
 import ShellFrame from "@/app/components/ShellFrame";
 import Avatar from "@/app/components/Avatar";
 import useSupabaseUser from "@/app/lib/useSupabaseUser";
-import {
-  familyMembers,
-  familyMessages,
-  FamilyMessage,
-} from "@/app/lib/mockData";
+import { supabase } from "@/app/lib/supabaseClient";
+import { familyMembers, FamilyMessage } from "@/app/lib/mockData";
 
-const STORAGE_KEY = "family_messages";
+const FAMILY_ID = "family_1";
 
 export default function MessagesPage() {
   const user = useSupabaseUser();
-  const [messages, setMessages] = useState<FamilyMessage[]>(familyMessages);
+  const [messages, setMessages] = useState<FamilyMessage[]>([]);
   const [draft, setDraft] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState<"connecting" | "connected" | "error">("connecting");
+
   const displayName = useMemo(() => {
     return user?.user_metadata?.display_name as string | undefined;
   }, [user?.user_metadata?.display_name]);
 
   const activeMemberId = useMemo(() => {
     if (!user?.id) return "family";
-    // Using the user id from our authStore which is the lowercase username
-    return familyMembers.find(
-      (m) => m.id.toLowerCase() === user.id.toLowerCase()
-    )?.id ?? "family";
+    return familyMembers.find(m => m.id.toLowerCase() === user.id.toLowerCase())?.id ?? "family";
   }, [user?.id]);
+  
   const canEdit = Boolean(user);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    const fetchMessages = async () => {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("messages")
+        .select("*")
+        .eq("family_id", FAMILY_ID)
+        .order("created_at", { ascending: false });
 
-    const storedMessages = window.localStorage.getItem(STORAGE_KEY);
-    if (!storedMessages) return;
-
-    try {
-      const parsed = JSON.parse(storedMessages) as FamilyMessage[];
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        setMessages(parsed);
+      if (data) {
+        setMessages(data.map((m: any) => ({
+          id: m.id,
+          authorId: m.author_id,
+          text: m.text,
+          timestamp: m.created_at,
+        })));
       }
-    } catch {
-      window.localStorage.removeItem(STORAGE_KEY);
-    }
-  }, []);
-
-  const memberLookup = useMemo(() => {
-    return new Map(familyMembers.map((member) => [member.id, member]));
-  }, []);
-
-  const handlePost = () => {
-    if (!canEdit) return;
-    const trimmed = draft.trim();
-    if (!trimmed) return;
-
-    const nextMessage: FamilyMessage = {
-      id: `msg-${Date.now()}`,
-      authorId: activeMemberId || familyMembers[0]?.id || "alex",
-      text: trimmed,
-      timestamp: new Date().toISOString(),
+      setLoading(false);
     };
 
-    setMessages((prev) => {
-      const updated = [nextMessage, ...prev];
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-      }
-      return updated;
-    });
+    fetchMessages();
 
-    setDraft("");
+    // REAL-TIME SUBSCRIPTION WITH DEBUGGING
+    const channel = supabase
+      .channel("messages-realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+          filter: `family_id=eq.${FAMILY_ID}`,
+        },
+        (payload) => {
+          console.log("New message received via Realtime:", payload);
+          const newMessage: FamilyMessage = {
+            id: payload.new.id,
+            authorId: payload.new.author_id,
+            text: payload.new.text,
+            timestamp: payload.new.created_at,
+          };
+          setMessages((prev) => [newMessage, ...prev]);
+        }
+      )
+      .subscribe((status) => {
+        console.log("Realtime subscription status:", status);
+        if (status === "SUBSCRIBED") setStatus("connected");
+        if (status === "CHANNEL_ERROR") setStatus("error");
+      });
+
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
+  const handlePost = async () => {
+    if (!canEdit || !draft.trim()) return;
+    const { error } = await supabase.from("messages").insert({
+      author_id: activeMemberId,
+      text: draft.trim(),
+      family_id: FAMILY_ID,
+    });
+    if (!error) setDraft("");
   };
 
   return (
@@ -84,97 +102,49 @@ export default function MessagesPage() {
           accent="sky"
           icon={
             <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path
-                d="M5 5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H9l-4 3v-3H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinejoin="round"
-              />
+              <path d="M5 5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H9l-4 3v-3H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
             </svg>
+          }
+          right={
+            <div className="flex items-center gap-2">
+              <span className={`h-2 w-2 rounded-full ${status === 'connected' ? 'bg-green-500' : status === 'error' ? 'bg-red-500' : 'bg-yellow-500 animate-pulse'}`} />
+              <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">{status}</span>
+            </div>
           }
         />
 
         <Card>
           <div className="space-y-4">
             <div className="space-y-3 rounded-2xl bg-zinc-50 px-4 py-4">
-              <label className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">
-                New message
-              </label>
               <textarea
                 value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                placeholder="Share an update with the family..."
-                className="min-h-[120px] w-full resize-none rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder="Share an update..."
+                className="min-h-[120px] w-full resize-none rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700"
               />
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="text-xs text-zinc-400">
-                  Posting as{" "}
-                  <span className="font-semibold text-zinc-600">
-                    {displayName ??
-                      memberLookup.get(activeMemberId)?.name ??
-                      "Family member"}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={handlePost}
-                  className="btnAccent rounded-full px-5 py-2 text-xs font-semibold uppercase tracking-[0.2em]"
-                  disabled={!canEdit}
-                >
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-zinc-400">Posting as <b>{displayName || activeMemberId}</b></span>
+                <button onClick={handlePost} className="btnAccent rounded-full px-5 py-2 text-xs font-semibold uppercase tracking-[0.2em]" disabled={!canEdit}>
                   Post
                 </button>
               </div>
             </div>
 
-            {!canEdit ? (
-              <div className="rounded-2xl bg-zinc-50 px-4 py-3 text-xs text-zinc-500">
-                Unlock to post messages.{" "}
-                <Link href="/login" className="font-semibold text-zinc-700">
-                  Go to sign in
-                </Link>
-              </div>
-            ) : null}
-
             <div className="space-y-3">
-              {messages.map((message) => {
-                const author = memberLookup.get(message.authorId);
-                const authorLabel =
-                  message.authorId === activeMemberId && displayName
-                    ? displayName
-                    : author?.name ?? message.authorId;
-                return (
-                  <div
-                    key={message.id}
-                    className="rounded-2xl bg-zinc-50 px-4 py-3"
-                  >
-                    <div className="flex items-start gap-3">
-                      <Avatar memberId={message.authorId} size={28} />
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between text-xs text-zinc-400">
-                          <span className="font-semibold text-zinc-600">
-                            {authorLabel}
-                          </span>
-                          <span>
-                            {new Date(message.timestamp).toLocaleString(
-                              undefined,
-                              {
-                                month: "short",
-                                day: "numeric",
-                                hour: "numeric",
-                                minute: "2-digit",
-                              }
-                            )}
-                          </span>
-                        </div>
-                        <div className="mt-2 text-sm text-zinc-600">
-                          {message.text}
-                        </div>
+              {loading ? <div className="text-center py-10 text-sm text-zinc-400">Syncing messages...</div> : messages.map((m) => (
+                <div key={m.id} className="rounded-2xl bg-zinc-50 px-4 py-3">
+                  <div className="flex items-start gap-3">
+                    <Avatar memberId={m.authorId} size={28} />
+                    <div className="flex-1">
+                      <div className="flex justify-between text-xs text-zinc-400">
+                        <span className="font-semibold text-zinc-600 uppercase">{m.authorId}</span>
+                        <span>{new Date(m.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                       </div>
+                      <div className="mt-2 text-sm text-zinc-600">{m.text}</div>
                     </div>
                   </div>
-                );
-              })}
+                </div>
+              ))}
             </div>
           </div>
         </Card>
