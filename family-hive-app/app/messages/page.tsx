@@ -9,9 +9,8 @@ import useSupabaseUser from "@/app/lib/useSupabaseUser";
 import { supabase } from "@/app/lib/supabaseClient";
 import { familyMembers, FamilyMessage } from "@/app/lib/mockData";
 
-// Hardcoded stable UUID
-const FAMILY_ID = "00000000-0000-0000-0000-000000000001";
-const APP_VERSION = "1.0.5"; // Incrementing to track deployment
+const FAMILY_ID = "family_hive_main"; // Simplified ID
+const APP_VERSION = "1.0.6"; 
 
 export default function MessagesPage() {
   const user = useSupabaseUser();
@@ -27,8 +26,6 @@ export default function MessagesPage() {
   }, [user?.id]);
   
   useEffect(() => {
-    setDebug(`v${APP_VERSION} | FID: ...${FAMILY_ID.slice(-5)}`);
-
     const fetchMessages = async () => {
       setLoading(true);
       const { data, error } = await supabase
@@ -38,7 +35,7 @@ export default function MessagesPage() {
         .order("created_at", { ascending: false });
 
       if (error) {
-        setDebug(prev => `${prev} | FetchErr: ${error.message}`);
+        setDebug(`FetchErr: ${error.message}`);
       } else if (data) {
         setMessages(data.map((m: any) => ({
           id: m.id, authorId: m.author_id, text: m.text, timestamp: m.created_at,
@@ -49,15 +46,13 @@ export default function MessagesPage() {
 
     fetchMessages();
 
-    // ULTRA-SIMPLIFIED REALTIME (No filters, just listen)
-    const channel = supabase.channel('any-msg')
+    // SIMPLE REALTIME
+    const channel = supabase.channel('room_main')
     .on('postgres_changes', { 
       event: 'INSERT', 
       schema: 'public', 
       table: 'messages'
     }, (payload) => {
-      console.log("Realtime payload:", payload);
-      // Only add if it matches our family_id
       if (payload.new.family_id === FAMILY_ID) {
         const newMessage: FamilyMessage = {
           id: payload.new.id,
@@ -70,7 +65,7 @@ export default function MessagesPage() {
     })
     .subscribe((status, err) => {
       setStatus(status);
-      if (err) setDebug(prev => `${prev} | RTErr: ${err.message}`);
+      if (err) setDebug(`RTErr: ${err.message}`);
     });
 
     return () => { supabase.removeChannel(channel); };
@@ -83,8 +78,8 @@ export default function MessagesPage() {
       text: draft.trim(),
       family_id: FAMILY_ID,
     });
-    if (error) setDebug(prev => `${prev} | PostErr: ${error.message}`);
-    setDraft("");
+    if (error) setDebug(`PostErr: ${error.message}`);
+    else setDraft("");
   };
 
   return (
@@ -100,7 +95,7 @@ export default function MessagesPage() {
                 <span className={`h-2 w-2 rounded-full ${status === 'SUBSCRIBED' ? 'bg-green-500' : 'bg-red-500 animate-pulse'}`} />
                 <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">{status}</span>
               </div>
-              <span className="text-[8px] text-zinc-400 mt-1 break-all max-w-[150px]">{debug}</span>
+              <span className="text-[8px] text-zinc-400 mt-1">v{APP_VERSION} | {debug}</span>
             </div>
           }
         />
@@ -112,7 +107,7 @@ export default function MessagesPage() {
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 placeholder="Share an update..."
-                className="min-h-[120px] w-full resize-none rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700"
+                className="min-h-[120px] w-full resize-none rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 focus:outline-none"
               />
               <div className="flex justify-between items-center">
                 <span className="text-xs text-zinc-400">Posting as <b>{activeMemberId}</b></span>
@@ -123,7 +118,7 @@ export default function MessagesPage() {
             </div>
 
             <div className="space-y-3">
-              {loading ? <div className="text-center py-10 text-sm text-zinc-400">Syncing messages...</div> : messages.map((m) => (
+              {loading ? <div className="text-center py-10 text-sm text-zinc-400">Syncing...</div> : messages.map((m) => (
                 <div key={m.id} className="rounded-2xl bg-zinc-50 px-4 py-3">
                   <div className="flex items-start gap-3">
                     <Avatar memberId={m.authorId} size={28} />
