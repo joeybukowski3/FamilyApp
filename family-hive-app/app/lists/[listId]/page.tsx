@@ -7,7 +7,6 @@ import Card from "@/app/components/Card";
 import ShellFrame from "@/app/components/ShellFrame";
 import Avatar from "@/app/components/Avatar";
 import useSupabaseUser from "@/app/lib/useSupabaseUser";
-import { supabase } from "@/app/lib/supabaseClient";
 import { familyMembers } from "@/app/lib/mockData";
 import {
   getSeedLists,
@@ -22,39 +21,12 @@ export default function ListDetailPage() {
   const [lists, setLists] = useState<ListsState>(getSeedLists);
   const [draft, setDraft] = useState("");
   const [hideCompleted, setHideCompleted] = useState(false);
-  const [isAuthorized, setIsAuthorized] = useState(false);
 
   const routeParams = useParams();
   const listIdRaw = routeParams?.listId;
   const listId = Array.isArray(listIdRaw)
     ? listIdRaw[0]
     : (listIdRaw as string | undefined);
-
-  // 1. Protection Gatekeeper: Check for User and PIN
-  useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { user: activeUser } } = await supabase.auth.getUser();
-      
-      if (!activeUser) {
-        router.push("/unlock");
-        return;
-      }
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('pin_hash')
-        .eq('id', activeUser.id)
-        .single();
-
-      if (!profile?.pin_hash) {
-        router.push("/unlock");
-      } else {
-        setIsAuthorized(true);
-      }
-    };
-    
-    checkAuth();
-  }, [router]);
 
   useEffect(() => {
     setLists(hydrateLists());
@@ -65,31 +37,18 @@ export default function ListDetailPage() {
   }, []);
 
   const displayName = useMemo(() => {
-    return (
-      (user?.user_metadata?.display_name as string | undefined) ?? user?.email
-    );
-  }, [user?.email, user?.user_metadata?.display_name]);
+    return user?.user_metadata?.display_name as string | undefined;
+  }, [user?.user_metadata?.display_name]);
 
   const activeMemberId = useMemo(() => {
-    if (!user?.email) {
-      return familyMembers[0]?.id ?? "family";
-    }
-    const local = user.email.split("@")[0]?.toLowerCase() ?? "";
-    return (
-      familyMembers.find(
-        (member) =>
-          member.id.toLowerCase() === local ||
-          member.name.toLowerCase() === local
-      )?.id ??
-      familyMembers[0]?.id ??
-      "family"
-    );
-  }, [user?.email]);
+    if (!user?.id) return "family";
+    // Using the user id from our authStore which is the lowercase username
+    return familyMembers.find(
+      (m) => m.id.toLowerCase() === user.id.toLowerCase()
+    )?.id ?? "family";
+  }, [user?.id]);
 
-  const canEdit = Boolean(user) && isAuthorized;
-
-  // Render nothing while checking authorization to prevent flickering
-  if (!isAuthorized) return null;
+  const canEdit = Boolean(user);
 
   // Guard: route param missing
   if (!listId || typeof listId !== "string") {

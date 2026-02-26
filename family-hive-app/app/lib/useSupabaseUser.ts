@@ -1,26 +1,28 @@
-import { useEffect, useState } from "react";
-import type { User } from "@supabase/supabase-js";
-import { supabase } from "@/app/lib/supabaseClient";
+"use client";
 
+import { useEffect, useState } from "react";
+import { getAuthUser } from "@/app/lib/authStore";
+
+// Renamed logic to use our custom authStore while keeping the hook name for compatibility
 export default function useSupabaseUser() {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
-    let mounted = true;
+    // Initial fetch of the authenticated user
+    setUser(getAuthUser());
 
-    supabase.auth.getUser().then(({ data }) => {
-      if (mounted) {
-        setUser(data.user ?? null);
-      }
-    });
+    // Listen for auth-change events to update the user state
+    const handleAuthChange = () => {
+      setUser(getAuthUser());
+    };
 
-    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
+    window.addEventListener("auth-change", handleAuthChange);
+    // Also listen for storage changes (in case of other tabs/windows)
+    window.addEventListener("storage", handleAuthChange);
 
     return () => {
-      mounted = false;
-      data.subscription.unsubscribe();
+      window.removeEventListener("auth-change", handleAuthChange);
+      window.removeEventListener("storage", handleAuthChange);
     };
   }, []);
 

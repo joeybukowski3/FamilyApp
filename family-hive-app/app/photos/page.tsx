@@ -92,6 +92,17 @@ export default function PhotosPage() {
     setIsModalOpen(false);
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setImageUrl(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleAddComment = (postId: string) => {
     if (!canEdit || !activeMemberId) return;
     const draft = commentDrafts[postId]?.trim();
@@ -292,21 +303,50 @@ export default function PhotosPage() {
       {isModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 accent-coral">
           <Card className="w-full max-w-lg">
-            <div className="space-y-3">
+            <div className="space-y-4">
               <div className="text-sm font-semibold text-zinc-700">
                 New Photo Post
               </div>
-              <input
-                type="text"
-                value={imageUrl}
-                onChange={(event) => setImageUrl(event.target.value)}
-                placeholder="Image URL"
-                className="w-full rounded-full border border-zinc-200 px-4 py-2 text-xs text-zinc-600"
-              />
+
+              {imageUrl ? (
+                <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100">
+                  <img
+                    src={imageUrl}
+                    alt="Preview"
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+              ) : (
+                <div className="flex aspect-video w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed border-zinc-200 bg-zinc-50 text-zinc-400">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    className="mb-2 h-8 w-8"
+                  >
+                    <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  <p className="text-xs">No photo selected</p>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold uppercase tracking-widest text-zinc-500">
+                  Select or Take Photo
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  className="w-full text-xs text-zinc-500 file:mr-4 file:rounded-full file:border-0 file:bg-coral-50 file:px-4 file:py-2 file:text-xs file:font-semibold file:text-coral-700 hover:file:bg-coral-100"
+                />
+              </div>
+
               <textarea
                 value={caption}
                 onChange={(event) => setCaption(event.target.value)}
-                placeholder="Caption"
+                placeholder="Write a caption..."
                 className="min-h-[96px] w-full resize-none rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-xs text-zinc-700 focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
               />
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -320,7 +360,8 @@ export default function PhotosPage() {
                 <button
                   type="button"
                   onClick={handleCreatePost}
-                  className="btnAccent rounded-full px-5 py-2 text-xs font-semibold uppercase tracking-[0.2em]"
+                  disabled={!imageUrl}
+                  className="btnAccent rounded-full px-5 py-2 text-xs font-semibold uppercase tracking-[0.2em] disabled:opacity-50"
                 >
                   Post
                 </button>

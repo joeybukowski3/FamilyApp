@@ -1,11 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Card from "@/app/components/Card";
 import ShellFrame from "@/app/components/ShellFrame";
 import { familyMembers } from "@/app/lib/mockData";
 import useSupabaseUser from "@/app/lib/useSupabaseUser";
-import { supabase } from "@/app/lib/supabaseClient";
 
 export default function ProfilePage({
   params,
@@ -13,18 +11,7 @@ export default function ProfilePage({
   params: { id: string };
 }) {
   const user = useSupabaseUser();
-  const displayName =
-    (user?.user_metadata?.display_name as string | undefined) ?? user?.email;
-  const [editingName, setEditingName] = useState(false);
-  const [draftName, setDraftName] = useState(displayName ?? "");
-  const [savingName, setSavingName] = useState(false);
-  const [nameError, setNameError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!editingName) {
-      setDraftName(displayName ?? "");
-    }
-  }, [displayName, editingName]);
+  const displayName = user?.user_metadata?.display_name as string | undefined;
 
   const member = familyMembers.find((item) => item.id === params.id);
   const name = member?.name ?? "Family Member";
@@ -60,60 +47,8 @@ export default function ProfilePage({
                       {displayName ?? "No display name yet"}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDraftName(displayName ?? "");
-                      setEditingName((prev) => !prev);
-                      setNameError(null);
-                    }}
-                    className="btnSecondary rounded-full px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.2em]"
-                  >
-                    {editingName ? "Cancel" : "Edit name"}
-                  </button>
+                  {/* Name editing removed as usernames are now fixed in the PIN system */}
                 </div>
-
-                {editingName ? (
-                  <div className="mt-3 grid gap-3">
-                    <input
-                      type="text"
-                      className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700"
-                      value={draftName}
-                      onChange={(e) => setDraftName(e.target.value)}
-                      placeholder="Enter display name"
-                    />
-                    {nameError ? (
-                      <div className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
-                        {nameError}
-                      </div>
-                    ) : null}
-                    <button
-                      type="button"
-                      className="btnPrimary rounded-full px-5 py-2 text-xs font-semibold uppercase tracking-[0.2em]"
-                      onClick={async () => {
-                        setNameError(null);
-                        const trimmed = draftName.trim();
-                        if (!trimmed) {
-                          setNameError("Display name is required.");
-                          return;
-                        }
-                        setSavingName(true);
-                        const { error } = await supabase.auth.updateUser({
-                          data: { display_name: trimmed },
-                        });
-                        setSavingName(false);
-                        if (error) {
-                          setNameError(error.message);
-                          return;
-                        }
-                        setEditingName(false);
-                      }}
-                      disabled={savingName}
-                    >
-                      Save name
-                    </button>
-                  </div>
-                ) : null}
               </div>
             ) : null}
           </div>

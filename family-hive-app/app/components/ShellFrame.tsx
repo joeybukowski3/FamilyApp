@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { ReactNode, useEffect } from "react";
 import ActiveMemberBadge from "@/app/components/ActiveMemberBadge";
 import useSupabaseUser from "@/app/lib/useSupabaseUser";
+import { logout } from "@/app/lib/authStore";
 
 type Props = {
   children: ReactNode;
@@ -120,9 +121,22 @@ export default function ShellFrame({
   familyName = "Bukowski's",
 }: Props) {
   const pathname = usePathname();
+  const router = useRouter();
   const user = useSupabaseUser();
 
   const displayName = user?.user_metadata?.display_name as string | undefined;
+
+  // Enforce authentication: redirect unauthenticated users to /login
+  useEffect(() => {
+    if (!user && pathname !== "/login") {
+      router.push("/login");
+    }
+  }, [user, pathname, router]);
+
+  const handleLogout = () => {
+    logout();
+    router.push("/login");
+  };
 
   return (
     <div className="appShell">
@@ -153,8 +167,16 @@ export default function ShellFrame({
 
         <div className="topBarCenter">{familyName}</div>
 
-        <div className="topBarRight">
+        <div className="topBarRight flex items-center gap-3">
           <ActiveMemberBadge />
+          {user && (
+            <button 
+              onClick={handleLogout}
+              className="rounded-lg border border-zinc-200 bg-white px-2 py-1 text-[10px] font-semibold text-zinc-500 hover:bg-zinc-50"
+            >
+              Sign Out
+            </button>
+          )}
         </div>
       </header>
 
@@ -179,14 +201,6 @@ export default function ShellFrame({
         </aside>
 
         <main className="mainContent container">
-          {user && !displayName && pathname !== "/setup" ? (
-            <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-              Finish setting up your display name.{" "}
-              <Link href="/setup" className="font-semibold text-amber-900">
-                Finish setup
-              </Link>
-            </div>
-          ) : null}
           {children}
         </main>
       </div>
