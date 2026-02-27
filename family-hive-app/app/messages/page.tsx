@@ -9,15 +9,15 @@ import useSupabaseUser from "@/app/lib/useSupabaseUser";
 import { supabase } from "@/app/lib/supabaseClient";
 import { familyMembers, FamilyMessage } from "@/app/lib/mockData";
 
-const FAMILY_ID = "family_hive_main"; // Simplified ID
-const APP_VERSION = "1.0.6"; 
+const FAMILY_ID = "family_hive_main";
+const APP_VERSION = "1.0.7"; 
 
 export default function MessagesPage() {
   const user = useSupabaseUser();
   const [messages, setMessages] = useState<FamilyMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(true);
-  const [status, setStatus] = useState<string>("initializing...");
+  const [status, setStatus] = useState<string>("init...");
   const [debug, setDebug] = useState<string>("");
 
   const activeMemberId = useMemo(() => {
@@ -25,47 +25,36 @@ export default function MessagesPage() {
     return familyMembers.find(m => m.id.toLowerCase() === user.id.toLowerCase())?.id ?? "family";
   }, [user?.id]);
   
+  const fetchMessages = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("messages")
+      .select("*")
+      .eq("family_id", FAMILY_ID)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      setDebug(`FetchErr: ${error.message}`);
+    } else if (data) {
+      setDebug(`Found ${data.length} messages`);
+      setMessages(data.map((m: any) => ({
+        id: m.id, authorId: m.author_id, text: m.text, timestamp: m.created_at,
+      })));
+    }
+    setLoading(false);
+  };
+
   useEffect(() => {
-    const fetchMessages = async () => {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from("messages")
-        .select("*")
-        .eq("family_id", FAMILY_ID)
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        setDebug(`FetchErr: ${error.message}`);
-      } else if (data) {
-        setMessages(data.map((m: any) => ({
-          id: m.id, authorId: m.author_id, text: m.text, timestamp: m.created_at,
-        })));
-      }
-      setLoading(false);
-    };
-
     fetchMessages();
 
-    // SIMPLE REALTIME
-    const channel = supabase.channel('room_main')
-    .on('postgres_changes', { 
-      event: 'INSERT', 
-      schema: 'public', 
-      table: 'messages'
-    }, (payload) => {
-      if (payload.new.family_id === FAMILY_ID) {
-        const newMessage: FamilyMessage = {
-          id: payload.new.id,
-          authorId: payload.new.author_id,
-          text: payload.new.text,
-          timestamp: payload.new.created_at,
-        };
-        setMessages((prev) => [newMessage, ...prev]);
-      }
+    const channel = supabase.channel('global-sync')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
+      console.log("Change detected:", payload);
+      fetchMessages(); // Force a re-fetch on any change
     })
     .subscribe((status, err) => {
       setStatus(status);
-      if (err) setDebug(`RTErr: ${err.message}`);
+      if (err) setDebug(prev => `${prev} | RTErr: ${err.message}`);
     });
 
     return () => { supabase.removeChannel(channel); };
@@ -79,7 +68,10 @@ export default function MessagesPage() {
       family_id: FAMILY_ID,
     });
     if (error) setDebug(`PostErr: ${error.message}`);
-    else setDraft("");
+    else {
+      setDraft("");
+      fetchMessages(); // Immediate refresh after post
+    }
   };
 
   return (
@@ -106,20 +98,24 @@ export default function MessagesPage() {
               <textarea
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
-                placeholder="Share an update..."
-                className="min-h-[120px] w-full resize-none rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 focus:outline-none"
+                placeholder="Type a message and click post..."
+                className="min-h-[120px] w-full resize-none rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700"
               />
               <div className="flex justify-between items-center">
-                <span className="text-xs text-zinc-400">Posting as <b>{activeMemberId}</b></span>
+                <button onClick={fetchMessages} className="text-[10px] uppercase font-bold text-zinc-400 hover:text-zinc-600">Refresh Feed</button>
                 <button onClick={handlePost} className="btnAccent rounded-full px-5 py-2 text-xs font-semibold uppercase tracking-[0.2em]">
-                  Post
+                  Post Message
                 </button>
               </div>
             </div>
 
             <div className="space-y-3">
-              {loading ? <div className="text-center py-10 text-sm text-zinc-400">Syncing...</div> : messages.map((m) => (
-                <div key={m.id} className="rounded-2xl bg-zinc-50 px-4 py-3">
+              {loading ? <div className="text-center py-10 text-sm text-zinc-400">Loading database...</div> : messages.length === 0 ? (
+                <div className="text-center py-10 text-sm text-zinc-400 border-2 border-dashed border-zinc-100 rounded-2xl">
+                  The database is empty. Be the first to post!
+                </div>
+              ) : messages.map((m) => (
+                <div key={m.id} className="rounded-2xl bg-zinc-50 px-4 py-3 border border-zinc-100">
                   <div className="flex items-start gap-3">
                     <Avatar memberId={m.authorId} size={28} />
                     <div className="flex-1">
