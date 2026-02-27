@@ -10,33 +10,28 @@ import { supabase } from "@/app/lib/supabaseClient";
 import { familyMembers, FamilyMessage } from "@/app/lib/mockData";
 
 const FAMILY_ID = "family_hive_main";
-const APP_VERSION = "1.0.9"; 
 
 export default function MessagesPage() {
   const user = useSupabaseUser();
   const [messages, setMessages] = useState<FamilyMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(true);
-  const [status, setStatus] = useState<string>("init...");
-  const [debug, setDebug] = useState<string>("");
+  const [status, setStatus] = useState<string>("connecting");
 
   const activeMemberId = useMemo(() => {
     if (!user?.id) return "family";
     return familyMembers.find(m => m.id.toLowerCase() === user.id.toLowerCase())?.id ?? "family";
   }, [user?.id]);
   
-  const fetchMessages = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
+  const fetchMessages = async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
+    const { data } = await supabase
       .from("messages")
       .select("*")
       .eq("family_id", FAMILY_ID)
       .order("created_at", { ascending: false });
 
-    if (error) {
-      setDebug(`FetchErr: ${error.message}`);
-    } else if (data) {
-      setDebug(`Found ${data.length} messages`);
+    if (data) {
       setMessages(data.map((m: any) => ({
         id: m.id, authorId: m.author_id, text: m.text, timestamp: m.created_at,
       })));
@@ -47,36 +42,39 @@ export default function MessagesPage() {
   useEffect(() => {
     fetchMessages();
 
-    const channel = supabase.channel('family_stream')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, (payload) => {
-      console.log("Realtime update:", payload);
-      fetchMessages();
+    // 1. Try Realtime
+    const channel = supabase.channel('family_chat')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => {
+      fetchMessages(true);
     })
-    .subscribe((status, err) => {
-      setStatus(status);
-      if (err) setDebug(prev => `${prev} | RTErr: ${err.message}`);
+    .subscribe((newStatus) => {
+      setStatus(newStatus);
     });
 
-    return () => { supabase.removeChannel(channel); };
+    // 2. Safety Refresh (Every 15 seconds) in case Realtime times out
+    const interval = setInterval(() => {
+      fetchMessages(true);
+    }, 15000);
+
+    return () => { 
+      supabase.removeChannel(channel);
+      clearInterval(interval);
+    };
   }, [activeMemberId]);
 
   const handlePost = async () => {
     const text = draft.trim();
     if (!text) return;
     
-    setDebug("Sending...");
     const { error } = await supabase.from("messages").insert({
       author_id: activeMemberId,
       text: text,
       family_id: FAMILY_ID,
     });
 
-    if (error) {
-      setDebug(`PostErr: ${error.message}`);
-    } else {
-      setDebug("Post Success!");
+    if (!error) {
       setDraft("");
-      fetchMessages();
+      fetchMessages(true);
     }
   };
 
@@ -84,16 +82,15 @@ export default function MessagesPage() {
     <ShellFrame>
       <div className="space-y-4 accent-sky">
         <PageHeader
-          title="Messages"
-          subtitle="Family updates and chat."
+          title="Family Board"
+          subtitle="Updates and messages."
           accent="sky"
           right={
-            <div className="flex flex-col items-end text-right">
-              <div className="flex items-center gap-2">
-                <span className={`h-2 w-2 rounded-full ${status === 'SUBSCRIBED' ? 'bg-green-500' : 'bg-red-500 animate-pulse'}`} />
-                <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">{status}</span>
-              </div>
-              <span className="text-[8px] text-zinc-400 mt-1">v{APP_VERSION} | {debug}</span>
+            <div className="flex items-center gap-2">
+              <span className={`h-2 w-2 rounded-full ${status === 'SUBSCRIBED' ? 'bg-green-500' : 'bg-zinc-300'}`} />
+              <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">
+                {status === 'SUBSCRIBED' ? 'Live' : 'Auto-Sync'}
+              </span>
             </div>
           }
         />
@@ -104,11 +101,11 @@ export default function MessagesPage() {
               <textarea
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
-                placeholder="Share an update with the family..."
+                placeholder="Share an update..."
                 className="min-h-[80px] w-full resize-none rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 focus:outline-none"
               />
               <div className="flex justify-between items-center">
-                <span className="text-xs text-zinc-400 font-medium">Posting as <span className="uppercase text-zinc-600">{activeMemberId}</span></span>
+                <span className="text-xs text-zinc-400">Posting as <span className="uppercase font-bold">{activeMemberId}</span></span>
                 <button onClick={handlePost} className="btnAccent rounded-full px-6 py-2 text-xs font-semibold uppercase tracking-widest">
                   Post
                 </button>
@@ -117,22 +114,22 @@ export default function MessagesPage() {
 
             <div className="space-y-3">
               {loading ? (
-                <div className="text-center py-10 text-xs text-zinc-400">Syncing...</div>
+                <div className="text-center py-10 text-xs text-zinc-400">Loading...</div>
               ) : messages.length === 0 ? (
                 <div className="text-center py-10 text-xs text-zinc-400 border-2 border-dashed border-zinc-100 rounded-2xl">
-                  No messages found.
+                  Board is empty.
                 </div>
               ) : (
                 messages.map((m) => (
-                  <div key={m.id} className="rounded-2xl bg-zinc-50 px-4 py-3 border border-zinc-100">
+                  <div key={m.id} className="rounded-2xl bg-zinc-50 px-4 py-3 border border-zinc-100 shadow-sm">
                     <div className="flex items-start gap-3">
                       <Avatar memberId={m.authorId} size={28} />
                       <div className="flex-1">
                         <div className="flex justify-between text-[10px] text-zinc-400">
                           <span className="font-bold text-zinc-600 uppercase">{m.authorId}</span>
-                          <span>{new Date(m.timestamp).toLocaleTimeString()}</span>
+                          <span>{new Date(m.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                         </div>
-                        <div className="mt-1 text-sm text-zinc-600">{m.text}</div>
+                        <div className="mt-1 text-sm text-zinc-600 leading-relaxed">{m.text}</div>
                       </div>
                     </div>
                   </div>
