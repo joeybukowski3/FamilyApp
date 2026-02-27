@@ -10,7 +10,7 @@ import { supabase } from "@/app/lib/supabaseClient";
 import { familyMembers, FamilyMessage } from "@/app/lib/mockData";
 
 const FAMILY_ID = "family_hive_main";
-const APP_VERSION = "1.0.7"; 
+const APP_VERSION = "1.0.8"; 
 
 export default function MessagesPage() {
   const user = useSupabaseUser();
@@ -47,10 +47,15 @@ export default function MessagesPage() {
   useEffect(() => {
     fetchMessages();
 
-    const channel = supabase.channel('global-sync')
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
-      console.log("Change detected:", payload);
-      fetchMessages(); // Force a re-fetch on any change
+    // v1.0.8: Using a more resilient channel name
+    const channel = supabase.channel('family_broadcast')
+    .on('postgres_changes', { 
+      event: '*', 
+      schema: 'public', 
+      table: 'messages' 
+    }, (payload) => {
+      console.log("Realtime change:", payload);
+      fetchMessages();
     })
     .subscribe((status, err) => {
       setStatus(status);
@@ -61,16 +66,21 @@ export default function MessagesPage() {
   }, [activeMemberId]);
 
   const handlePost = async () => {
-    if (!draft.trim()) return;
+    const text = draft.trim();
+    if (!text) return;
+    
+    setDebug("Posting...");
     const { error } = await supabase.from("messages").insert({
       author_id: activeMemberId,
-      text: draft.trim(),
+      text: text,
       family_id: FAMILY_ID,
     });
-    if (error) setDebug(`PostErr: ${error.message}`);
-    else {
+
+    if (error) {
+      setDebug(`PostErr: ${error.message}`);
+    } else {
       setDraft("");
-      fetchMessages(); // Immediate refresh after post
+      fetchMessages();
     }
   };
 
@@ -79,7 +89,7 @@ export default function MessagesPage() {
       <div className="space-y-4 accent-sky">
         <PageHeader
           title="Messages"
-          subtitle="Quick updates for the whole family."
+          subtitle="Family updates and chat."
           accent="sky"
           right={
             <div className="flex flex-col items-end text-right">
@@ -98,36 +108,39 @@ export default function MessagesPage() {
               <textarea
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
-                placeholder="Type a message and click post..."
-                className="min-h-[120px] w-full resize-none rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700"
+                placeholder="Write something..."
+                className="min-h-[80px] w-full resize-none rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700"
               />
-              <div className="flex justify-between items-center">
-                <button onClick={fetchMessages} className="text-[10px] uppercase font-bold text-zinc-400 hover:text-zinc-600">Refresh Feed</button>
-                <button onClick={handlePost} className="btnAccent rounded-full px-5 py-2 text-xs font-semibold uppercase tracking-[0.2em]">
-                  Post Message
+              <div className="flex justify-end">
+                <button onClick={handlePost} className="btnAccent rounded-full px-6 py-2 text-xs font-semibold uppercase tracking-widest">
+                  Post
                 </button>
               </div>
             </div>
 
             <div className="space-y-3">
-              {loading ? <div className="text-center py-10 text-sm text-zinc-400">Loading database...</div> : messages.length === 0 ? (
-                <div className="text-center py-10 text-sm text-zinc-400 border-2 border-dashed border-zinc-100 rounded-2xl">
-                  The database is empty. Be the first to post!
+              {loading ? (
+                <div className="text-center py-10 text-xs text-zinc-400">Loading...</div>
+              ) : messages.length === 0 ? (
+                <div className="text-center py-10 text-xs text-zinc-400 border-2 border-dashed border-zinc-100 rounded-2xl">
+                  No messages found in database.
                 </div>
-              ) : messages.map((m) => (
-                <div key={m.id} className="rounded-2xl bg-zinc-50 px-4 py-3 border border-zinc-100">
-                  <div className="flex items-start gap-3">
-                    <Avatar memberId={m.authorId} size={28} />
-                    <div className="flex-1">
-                      <div className="flex justify-between text-xs text-zinc-400">
-                        <span className="font-semibold text-zinc-600 uppercase">{m.authorId}</span>
-                        <span>{new Date(m.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+              ) : (
+                messages.map((m) => (
+                  <div key={m.id} className="rounded-2xl bg-zinc-50 px-4 py-3 border border-zinc-100">
+                    <div className="flex items-start gap-3">
+                      <Avatar memberId={m.authorId} size={28} />
+                      <div className="flex-1">
+                        <div className="flex justify-between text-[10px] text-zinc-400">
+                          <span className="font-bold text-zinc-600 uppercase">{m.authorId}</span>
+                          <span>{new Date(m.timestamp).toLocaleTimeString()}</span>
+                        </div>
+                        <div className="mt-1 text-sm text-zinc-600">{m.text}</div>
                       </div>
-                      <div className="mt-2 text-sm text-zinc-600">{m.text}</div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </Card>
