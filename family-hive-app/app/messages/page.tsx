@@ -10,7 +10,7 @@ import { supabase } from "@/app/lib/supabaseClient";
 import { familyMembers, FamilyMessage } from "@/app/lib/mockData";
 
 const FAMILY_ID = "family_hive_main";
-const APP_VERSION = "1.0.8"; 
+const APP_VERSION = "1.0.9"; 
 
 export default function MessagesPage() {
   const user = useSupabaseUser();
@@ -47,14 +47,9 @@ export default function MessagesPage() {
   useEffect(() => {
     fetchMessages();
 
-    // v1.0.8: Using a more resilient channel name
-    const channel = supabase.channel('family_broadcast')
-    .on('postgres_changes', { 
-      event: '*', 
-      schema: 'public', 
-      table: 'messages' 
-    }, (payload) => {
-      console.log("Realtime change:", payload);
+    const channel = supabase.channel('family_stream')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, (payload) => {
+      console.log("Realtime update:", payload);
       fetchMessages();
     })
     .subscribe((status, err) => {
@@ -69,7 +64,7 @@ export default function MessagesPage() {
     const text = draft.trim();
     if (!text) return;
     
-    setDebug("Posting...");
+    setDebug("Sending...");
     const { error } = await supabase.from("messages").insert({
       author_id: activeMemberId,
       text: text,
@@ -79,6 +74,7 @@ export default function MessagesPage() {
     if (error) {
       setDebug(`PostErr: ${error.message}`);
     } else {
+      setDebug("Post Success!");
       setDraft("");
       fetchMessages();
     }
@@ -108,10 +104,11 @@ export default function MessagesPage() {
               <textarea
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
-                placeholder="Write something..."
-                className="min-h-[80px] w-full resize-none rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700"
+                placeholder="Share an update with the family..."
+                className="min-h-[80px] w-full resize-none rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 focus:outline-none"
               />
-              <div className="flex justify-end">
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-zinc-400 font-medium">Posting as <span className="uppercase text-zinc-600">{activeMemberId}</span></span>
                 <button onClick={handlePost} className="btnAccent rounded-full px-6 py-2 text-xs font-semibold uppercase tracking-widest">
                   Post
                 </button>
@@ -120,10 +117,10 @@ export default function MessagesPage() {
 
             <div className="space-y-3">
               {loading ? (
-                <div className="text-center py-10 text-xs text-zinc-400">Loading...</div>
+                <div className="text-center py-10 text-xs text-zinc-400">Syncing...</div>
               ) : messages.length === 0 ? (
                 <div className="text-center py-10 text-xs text-zinc-400 border-2 border-dashed border-zinc-100 rounded-2xl">
-                  No messages found in database.
+                  No messages found.
                 </div>
               ) : (
                 messages.map((m) => (
